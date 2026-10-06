@@ -5,10 +5,22 @@ A pixel-art toy for a toddler who loves fire trucks. One page, no build step, no
 ## How to play
 - **Tap a vehicle** (fire truck, police car, ambulance). It says its name, turns on its lights and siren, drives around the block and parks itself again. Tap it while it's driving to honk.
 - **Tap a paint pot** to repaint the vehicle with the yellow arrow over it. A recorded voice says the color name. Colors are remembered on the device.
-- **Tap the flame button** (top-left) for a fire call: the bell rings, the fire truck races to a burning house, and he drags or taps to spray water. Each window that goes out shows a waving neighbor or a kitty; when they're all out there's a celebration, then the pulsing flame button starts a new fire and the blue house button drives home.
-- Hidden surprises: the **bell** on the tower, the **dog**, the **fire hydrant**, the **sun** and the **helicopter**.
+- **Upstairs** the crew lives their day: eating at the table, watching TV, sleeping in the bunk room, sliding down the fire pole. Tap anyone to make them hop and wave; tap the sleeper to wake them.
+- **Tap the sun** for night (the sun rolls away over the top and the moon rises in from the right); tap the moon for morning.
+- **Mini-game buttons** (top left):
+  - **Flame: Spray the Fire.** The fire truck races to a burning house. Drag or tap to spray; every fire goes out the moment the water touches it. Neighbors and kitties wave from the windows.
+  - **Red cross: ambulance mission.** Help a hurt kid, hold the go button to drive to the hospital.
+  - **Star: police mission.** Stop the traffic so ducks and people can cross.
+  - **Heart: Who Comes to Help?** Pick the right vehicle for each problem.
+  - **Moon: bedtime.** Night falls; tap each vehicle to roll its garage door down. Then the lights go out, the dog curls up and a lullaby plays. Tap the sun button or the moon to wake everyone up.
+- Hidden surprises: the **bell** on the tower, the **dog**, the **fire hydrant** and the **helicopter**.
 
 There is no way to lose and nothing to read.
+
+## Code layout
+- `js/core.js`: shared engine (canvas, sprites, sound, day/night sky, scene system, input).
+- `js/station.js`, `js/fire.js`, `js/help.js`, `js/amb.js`, `js/police.js`: one file per scene, each registering `SCENES.<name>`.
+- `js/main.js`: boot and main loop. `index.html#fire` (or `#help`, `#amb`, `#police`) jumps straight into a scene after Play.
 
 ## Run it
 Open `index.html` in a browser, or serve the folder (`python3 -m http.server`) and open it on the phone or iPad on the same Wi-Fi. When it's hosted (e.g. GitHub Pages), use Safari's **Share → Add to Home Screen** to get a full-screen app icon.
