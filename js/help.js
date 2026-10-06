@@ -312,7 +312,7 @@
     },
     ask() { return { x: this.cx() + DUCK_DX[0], y: Y.floorY - 13 }; },
     duckPos(s, i) {
-      const k = s.ct < 0 ? 0 : clamp01((s.ct - i * 0.3) / 2.4);
+      const k = s.ct < 0 ? 0 : clamp01((s.ct - i * 0.2) / 1.6);
       return { x: this.cx() + DUCK_DX[i], y: lerp(Y.roadY + 2, Y.roadY + Y.roadH - 1, k), walk: k > 0 && k < 1 };
     },
     update(s, dt) {
@@ -321,9 +321,11 @@
       let limit = Infinity;
       for (const c of s.cars) {         // far-lane traffic, queueing behind the officer when stopped
         let lim = limit;
-        if (s.stop && c.x + 34 <= stopX + 1) lim = Math.min(lim, stopX);
+        const before = c.x + 34 <= stopX + 1;
+        if (s.stop && before) lim = Math.min(lim, stopX);
         const room = lim - (c.x + 34);
-        const sp = room < 30 ? Math.max(0, room * 2) : 55;
+        // stopped traffic brakes hard; a car already past the officer hurries through
+        const sp = s.stop && !before ? 160 : room < 24 ? Math.max(0, room * 4) : 55;
         const x0 = c.x;
         c.x = Math.min(c.x + sp * dt, lim === Infinity ? Infinity : Math.max(c.x, lim - 34));
         c.rot += (c.x - x0) / 4;
@@ -336,19 +338,19 @@
         if (s.cars.length < 5 && last > 8) s.cars.push({ x: -40, c: pickOne(CAR_RAMPS), rot: 0 });
       }
       if (s.ct < 0 && (s.quack -= dt) <= 0) { s.quack = rand(2.8, 4); SFX.quack(); hop('d0'); }
-      if (s.ct >= 0 && s.ct < 3.4 && (s.peep -= dt) <= 0) { s.peep = rand(0.3, 0.6); SFX.peep(); }
+      if (s.ct >= 0 && s.ct < 2.2 && (s.peep -= dt) <= 0) { s.peep = rand(0.3, 0.6); SFX.peep(); }
       if (happy() && (s.peep -= dt) <= 0) { s.peep = rand(0.6, 1.2); SFX.peep(); }
     },
     rescue(s, dt, t) {
       const cx = this.cx();
       if (once(s, 'door', true)) SFX.door();
-      s.ok = t >= 0.2 ? clamp01((t - 0.2) / 1.1) : -1;
-      if (once(s, 'stop', t >= 1.3)) { s.stop = true; whistle(); }
+      s.ok = t >= 0.15 ? clamp01((t - 0.15) / 0.75) : -1;
+      if (once(s, 'stop', t >= 0.9)) { s.stop = true; whistle(); }
       const clear = !s.cars.some(c => c.x < cx + 26 && c.x + 34 > cx - 22);
-      if (s.ct < 0 && t >= 1.7 && clear) { s.ct = 0; SFX.quack(); }
+      if (s.ct < 0 && t >= 1.0 && (clear || t >= 1.6)) { s.ct = 0; SFX.quack(); }
       if (s.ct >= 0) s.ct += dt;
-      if (s.ct >= 3.6) {
-        s.ob = clamp01((s.ct - 3.6) / 0.7);
+      if (s.ct >= 2.0) {
+        s.ob = clamp01((s.ct - 2.0) / 0.5);
         if (s.ob >= 1) { s.stop = false; return true; }
       }
       return false;
@@ -612,6 +614,44 @@
     for (let xx = 7; xx < W; xx += 23) { R(xx, Y.palY + 5 + (xx % 3), 1, 2, '#7cc96a'); R(xx + 11, H - 4 - (xx % 2), 1, 2, '#7cc96a'); }
   }
 
+  function drawCard(cd, vi, bx, by, glow) {
+    const x = cd.x + bx, y = cd.y + by;
+    rr(cd.x, cd.y + 2, cd.w, cd.h, '#2f6b29');
+    if (glow) alpha(0.55 + 0.45 * Math.sin(T * 6), () => rr(x - 2, y - 2, cd.w + 4, cd.h + 4, '#ffd21f'));
+    rr(x, y, cd.w, cd.h, '#cfd8e2'); rr(x, y, cd.w, cd.h - 3, '#ffffff');
+    const vv = V[vi];
+    drawV(vi, x + Math.floor((cd.w - vv.len) / 2), y + Math.min(cd.h - 4, Math.floor((cd.h + vv.h) / 2) + 2), false, 0, 0, true);
+  }
+  const STAR = ['000010000', '000010000', '000111000', '111111111', '011111110', '001111100', '001101100', '011000110', '010000010'];
+  function drawStar(cx, cy, u) {
+    const paint = (ox, oy, c) => STAR.forEach((r, j) => [...r].forEach((b, i) => { if (b === '1') R(cx + (i - 4) * u + ox, cy + (j - 4) * u + oy, u, u, c); }));
+    paint(0, u, '#c99410'); paint(0, 0, '#ffd21f'); R(cx - u, cy - u, u, u, '#fff6b0');
+  }
+  // the scene's characters pop up one by one in the strip and cheer
+  function drawCast() {
+    const cast = sc().cast || [], p = Y.cast;
+    if (!cast.length || p.w < 20) return;
+    rr(p.x, p.y + 2, p.w, p.h, '#2f6b29'); rr(p.x, p.y, p.w, p.h, '#4a9440'); rr(p.x + 2, p.y + 2, p.w - 4, p.h - 4, '#8fd6ff');
+    R(p.x + 2, p.y + p.h - 9, p.w - 4, 6, '#7cc96a'); R(p.x + 2, p.y + p.h - 9, p.w - 4, 1, '#5aa84c');
+    const step = Math.min(26, (p.w - 8) / cast.length), x0 = p.x + p.w / 2 - step * (cast.length - 1) / 2;
+    cast.forEach((fn, i) => {
+      const a = st.pt - 0.3 - i * 0.28;
+      if (a < 0) return;
+      const h = a < 0.35 ? Math.sin(a / 0.35 * Math.PI) * 8 : Math.abs(Math.sin(T * 6 + i * 1.3)) * 3;
+      fn(Math.round(x0 + i * step), p.y + p.h - 5, Math.round(h), i);
+    });
+  }
+  const castPerson = (type, skin) => (x, yb, h, i) => drawPerson({ type, x, yb, dir: 1, pose: 'cheer', skin, hop: h, seed: i });
+  const castCat = (x, yb, h) => drawBigCat(x, yb - h, 1);
+  const castDuck = big => (x, yb, h) => drawBigDuck(x, yb - h, big, 1);
+  const castDog = (col, dark) => (x, yb, h) => drawBigDog(x, yb - h, 1, col, dark);
+  SC[0].cast = [castPerson('kid', SKIN[1]), castCat, castPerson('ff')];
+  SC[1].cast = [castPerson('kid2', SKIN[0]), castPerson('medic')];
+  SC[2].cast = [castPerson('cop'), castDuck(true), castDuck(false), castDuck(false)];
+  SC[3].cast = [castPerson('ff'), castDog('#e0b070', '#8a5a2a')];
+  SC[4].cast = [castPerson('gran'), castPerson('medic')];
+  SC[5].cast = [castPerson('kid3', SKIN[2]), castDog('#f4f7fb', '#8a5a2a'), castPerson('cop')];
+
   SCENES.help = {
     view: [186, 200],
     groundY: () => Y.hillY,
@@ -631,6 +671,9 @@
         Y.home = { x: L.safeL + 8, y: Y.palY + Math.floor((Y.palH - hs) / 2), s: hs };
         const big = hs + 10;
         Y.again = { x: Math.floor(L.cx - big / 2), y: Y.palY + Math.floor((Y.palH - big) / 2), s: big };
+        Y.hero = st.cards[0];
+        const cx0 = Y.again.x + big + 10, room = W - L.safeR - 8 - cx0, cw = Math.min(room, w);
+        Y.cast = { x: cx0 + Math.floor((room - cw) / 2), y: Y.palY + 4, w: cw, h: ch };
       } else {
         const ch = Math.max(46, Math.min(60, Math.floor((H - 300) / 2.5))), rg = 6;
         w = Math.min(92, Math.floor((uw - 12 - gap) / 2));
@@ -644,8 +687,10 @@
           { vi: VI.fire, x: x0 + w + gap, y: r1, w, h: ch },
           { vi: VI.amb, x: Math.min(ax, W - L.safeR - 4 - w), y: r2, w, h: ch },
         ];
-        const big = 58;
-        Y.again = { x: Math.max(Math.round(L.cx - big / 2), Y.home.x + hb + 10), y: Y.palY + Math.floor((Y.palH - big) / 2), s: big };
+        const big = ch;   // the next button takes the ambulance card's place
+        Y.again = { x: st.cards[2].x + Math.floor((w - big) / 2), y: r2 - 1, s: big };
+        Y.hero = st.cards[0];
+        Y.cast = { x: st.cards[1].x, y: r1, w, h: ch };
       }
       Y.roadH = 46; Y.roadY = Y.palY - Y.roadH; Y.floorY = Y.roadY; Y.laneY = Y.roadY + Y.roadH - 6;
       Y.hillY = Math.min(Y.floorY - 30, Math.round(H * 0.3) + 30);
@@ -690,8 +735,13 @@
       for (const v of st.leavers) updVeh(v, dt);
       st.leavers = st.leavers.filter(v => v.x < W + 10);
       if (st.state === 'rescue' && c.rescue(s, dt, st.t)) {
-        st.state = 'party'; st.t = 0; st.hint = false;
+        st.state = 'party'; st.t = 0; st.hint = false; st.pt = 0; st.popped = 0;
         SFX.fanfare(); say(pick('praise'), true);
+      }
+      if (happy()) {
+        st.pt += dt;
+        const cast = c.cast || [];
+        if (st.popped < cast.length && st.pt >= 0.3 + st.popped * 0.28) { SFX.boop(1 + st.popped * 0.2); st.popped++; }
       }
       if (st.state === 'party') {
         confetti();
@@ -732,14 +782,16 @@
           const hint = st.hint && cd.vi === want;
           const by = hint ? -Math.round(Math.abs(Math.sin(T * 5)) * 4) : 0;
           const bx = hint ? Math.round(Math.sin(T * 10) * (Math.sin(T * 2.5) > 0.3 ? 1 : 0)) : 0;
-          const x = cd.x + bx, y = cd.y + by;
-          rr(cd.x, cd.y + 2, cd.w, cd.h, '#2f6b29');
-          if (hint) alpha(0.55 + 0.45 * Math.sin(T * 6), () => rr(x - 2, y - 2, cd.w + 4, cd.h + 4, '#ffd21f'));
-          rr(x, y, cd.w, cd.h, '#cfd8e2'); rr(x, y, cd.w, cd.h - 3, '#ffffff');
-          const vv = V[cd.vi];
-          drawV(cd.vi, x + Math.floor((cd.w - vv.len) / 2), y + Math.min(cd.h - 4, Math.floor((cd.h + vv.h) / 2) + 2), false, 0, 0, true);
+          drawCard(cd, cd.vi, bx, by, hint);
         }
+      } else if (st.veh) {
+        // the chosen vehicle's card stays up; the right one glows, bounces and wins a star
+        const win = st.veh.right && st.state !== 'drive';
+        const by = win ? -Math.round(Math.abs(Math.sin(T * 4)) * 3) : 0;
+        drawCard(Y.hero, st.veh.i, 0, by, win);
+        if (win) drawStar(Y.hero.x + Y.hero.w - 5, Y.hero.y + by + 3 + Math.round(Math.sin(T * 6)), 2);
       }
+      if (happy()) drawCast();
       if (st.state === 'done') drawAgainButton(Y.again, '#3fb43a', '#1f7a2a');
     },
     tap(x, y) {
