@@ -1,6 +1,6 @@
 // Offline support: everything the game needs is cached on first visit.
 // Bump VERSION whenever any file changes so devices pick up the update.
-const VERSION = 'fire-station-v18';
+const VERSION = 'fire-station-v19';
 const FILES = [
   './',
   './index.html',
@@ -48,6 +48,36 @@ const FILES = [
   './audio/white.mp3',
   './audio/yellow.mp3',
   './audio/you-did-it.mp3',
+  './audio/movie-amb-01.mp3',
+  './audio/movie-amb-02.mp3',
+  './audio/movie-amb-03.mp3',
+  './audio/movie-amb-04.mp3',
+  './audio/movie-amb-05.mp3',
+  './audio/movie-amb-06.mp3',
+  './audio/movie-amb-07.mp3',
+  './audio/movie-amb-08.mp3',
+  './audio/movie-amb-09.mp3',
+  './audio/movie-amb-10.mp3',
+  './audio/movie-fire-01.mp3',
+  './audio/movie-fire-02.mp3',
+  './audio/movie-fire-03.mp3',
+  './audio/movie-fire-04.mp3',
+  './audio/movie-fire-05.mp3',
+  './audio/movie-fire-06.mp3',
+  './audio/movie-fire-07.mp3',
+  './audio/movie-fire-08.mp3',
+  './audio/movie-fire-09.mp3',
+  './audio/movie-fire-10.mp3',
+  './audio/movie-police-01.mp3',
+  './audio/movie-police-02.mp3',
+  './audio/movie-police-03.mp3',
+  './audio/movie-police-04.mp3',
+  './audio/movie-police-05.mp3',
+  './audio/movie-police-06.mp3',
+  './audio/movie-police-07.mp3',
+  './audio/movie-police-08.mp3',
+  './audio/movie-police-09.mp3',
+  './audio/movie-police-10.mp3',
 ];
 
 self.addEventListener('install', e => {
