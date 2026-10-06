@@ -37,7 +37,7 @@
     furnish();
     // mini-game launchers: two short columns beside the station when it fits, else a row on top
     // mini-game launchers: a 3x3 block beside the station when it fits, else two rows of four on top
-    const kinds = ['fire', 'amb', 'police', 'help', 'wash', 'chopper', 'stickers', 'movies', 'bed'];
+    const kinds = ['fire', 'amb', 'police', 'help', 'wash', 'chopper', 'stickers', 'movies', 'drive', 'bed'];
     const side = B.x - L.safeL >= 100 && B.top - L.safeT < 120;
     btns = kinds.map((k, i) => side
       ? { k, x: L.safeL + 20 + (i % 3) * 32, y: L.safeT + 22 + Math.floor(i / 3) * 32, r: 13 }
@@ -213,7 +213,7 @@
     if (k === 'bed') { bed.on ? wakeUp() : bedtime(); return; }
     if (bed.on) return;
     if (!SCENES[k]) return;   // that mini-game isn't installed
-    if (k === 'help' || k === 'chopper' || k === 'stickers' || k === 'movies') { SFX.chime(); goScene(k); return; }
+    if (k === 'help' || k === 'chopper' || k === 'stickers' || k === 'movies' || k === 'drive') { SFX.chime(); goScene(k); return; }
     if (k === 'wash') { if (pendingMission) return; SFX.chime(); say(pick(V[selected].kind)); launchMission(selected, 'wash'); return; }
     if (pendingMission) return;
     SFX.bell(); bell.swing = 1.4;
@@ -598,6 +598,11 @@
       R(x - 9, y - 7, 18, 13, '#ffd21f'); R(x - 8, y - 6, 16, 11, '#3a2a4a');
       for (let k = 0; k < 7; k++) R(x - 2, y - 4 + k, Math.min(k, 6 - k) + 1, 1, '#ffffff');
       R(x - 4, y + 6, 8, 2, '#ffd21f'); R(x - 9, y - 9, 2, 2, '#e8222b'); R(x + 7, y - 9, 2, 2, '#e8222b');
+    },
+    drive: (x, y, r) => {
+      roundButton(x, y, r, '#f57a12', true);
+      circle(x, y, 9, '#2f3240'); circle(x, y, 7, '#f57a12'); circle(x, y, 2, '#2f3240');
+      R(x - 7, y - 1, 14, 2, '#2f3240'); R(x - 1, y, 2, 7, '#2f3240');
     },
     bed: (x, y, r) => {
       roundButton(x, y, r, '#55289a', true);

@@ -940,7 +940,10 @@ cv.addEventListener('pointerdown', e => {
   if (hitSky(p.x, p.y)) { setNight(!isNight()); return; }
   if (!sc.freeTouch && hitCloud(p.x, p.y)) { cycleWeather(); return; }
   if (sc.tap && sc.tap(p.x, p.y, e.pointerId)) return;
-  if (hitHeli(p.x, p.y)) { heli.hop = 1; heli.boost = 1.2; SFX.chop(); say('helicopter'); }
+  if (hitHeli(p.x, p.y)) {
+    heli.hop = 1; heli.boost = 1.2; SFX.chop(); say('helicopter');
+    if (scene === 'station' && SCENES.flyer) goScene('flyer');   // hop in and fly around the city
+  }
 });
 cv.addEventListener('pointermove', e => {
   const sc = SCENES[scene];
