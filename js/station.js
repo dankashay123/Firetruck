@@ -36,11 +36,13 @@
     B.hydX = B.x + B.w + 6;
     furnish();
     // mini-game launchers: two short columns beside the station when it fits, else a row on top
-    const kinds = ['fire', 'amb', 'police', 'help', 'bed'];
-    const twoCol = B.x - L.safeL >= 74 && B.top - L.safeT < 120;
-    btns = kinds.map((k, i) => twoCol
-      ? { k, x: L.safeL + 22 + (i >= 3 ? 34 : 0), y: L.safeT + 24 + (i % 3) * 34, r: 14 }
-      : { k, x: L.safeL + 24 + i * 34, y: L.safeT + 30, r: 14 });
+    // mini-game launchers: a 3x3 block beside the station when it fits, else two rows of four on top
+    const kinds = ['fire', 'amb', 'police', 'help', 'wash', 'chopper', 'stickers', 'bed'];
+    const side = B.x - L.safeL >= 100 && B.top - L.safeT < 120;
+    btns = kinds.map((k, i) => side
+      ? { k, x: L.safeL + 20 + (i % 3) * 32, y: L.safeT + 22 + Math.floor(i / 3) * 32, r: 13 }
+      : { k, x: L.safeL + 24 + (i % 4) * 34, y: L.safeT + 30 + Math.floor(i / 4) * 34, r: 14 });
+    const twoCol = side;
     B.leftTree = !twoCol && B.x - L.safeL >= 64;
     B.rightTree = W - L.safeR - (B.x + B.w) >= 64;
     const total = 9 * L.blob + 8 * L.gap;
@@ -181,7 +183,7 @@
         v.speed = Math.min(150, v.speed + 260 * dt);
         v.x += v.speed * dt;
         if (!v.lap && v.x > W + 8) {
-          if (v.mission) { const m = v.mission; v.mission = null; v.state = 'away'; v.x = W + 200; goScene(m); continue; }
+          if (v.mission) { const m = v.mission; v.mission = null; v.state = 'away'; v.x = W + 200; goScene(m, { v: V.indexOf(v) }); continue; }
           v.x = -v.len - 8; v.lap = true; say('back-to-the-station', true);
         }
         if (v.lap && v.x >= v.homeX - 45) v.state = 'arrive';
@@ -211,7 +213,8 @@
     if (k === 'bed') { bed.on ? wakeUp() : bedtime(); return; }
     if (bed.on) return;
     if (!SCENES[k]) return;   // that mini-game isn't installed
-    if (k === 'help') { SFX.chime(); goScene('help'); return; }
+    if (k === 'help' || k === 'chopper' || k === 'stickers') { SFX.chime(); goScene(k); return; }
+    if (k === 'wash') { if (pendingMission) return; SFX.chime(); say(pick(V[selected].kind)); launchMission(selected, 'wash'); return; }
     if (pendingMission) return;
     SFX.bell(); bell.swing = 1.4;
     selected = VI[k];
@@ -345,6 +348,18 @@
       R(bx2, bot - 3, B.bayW, 3, '#57505f');
       R(bx2, B.bayTop, B.bayW, 7, '#cdd2d8');
       for (let k = 1; k < 7; k += 2) R(bx2, B.bayTop + k, B.bayW, 1, '#a9b0b8');
+    });
+  }
+  function drawSnowCaps() {
+    const k = weather.kind === 'snow' ? weather.k : 0;
+    if (k < 0.05) return;
+    alpha(k, () => {
+      R(B.x - 4, B.top - 6, B.w + 8, 3, '#ffffff');
+      R(B.towerX - 15, B.top - 35, 30, 2, '#ffffff'); R(B.towerX - 11, B.top - 38, 22, 2, '#ffffff');
+      R(B.mainX + (B.w - B.annexW - 106) / 2, B.signTop + 2, 106, 2, '#ffffff');
+      for (const bx of B.bays) R(bx - 2, B.bayTop - 3, B.bayW + 4, 2, '#ffffff');
+      R(B.hydX, L.floorY - 15, 9, 2, '#ffffff');
+      R(0, L.floorY - 2, W, 2, '#ffffff');
     });
   }
   function drawDoors() {
@@ -549,30 +564,47 @@
     }
   }
   const ICONS = {
-    fire: (x, y) => { roundButton(x, y, 14, '#e8222b', true); flame(x, y + 9, 1.15, 1); },
-    amb: (x, y) => { roundButton(x, y, 14, '#f4f7fb', true); R(x - 2, y - 8, 5, 16, '#e8222b'); R(x - 8, y - 2, 16, 5, '#e8222b'); },
-    police: (x, y) => {
-      roundButton(x, y, 14, '#2a6fe0', true);
+    fire: (x, y, r) => { roundButton(x, y, r, '#e8222b', true); flame(x, y + 9, 1.15, 1); },
+    amb: (x, y, r) => { roundButton(x, y, r, '#f4f7fb', true); R(x - 2, y - 8, 5, 16, '#e8222b'); R(x - 8, y - 2, 16, 5, '#e8222b'); },
+    police: (x, y, r) => {
+      roundButton(x, y, r, '#2a6fe0', true);
       for (let k = 0; k < 5; k++) { const a = -Math.PI / 2 + k * 2 * Math.PI / 5; for (let d = 0; d < 9; d++) R(x + Math.cos(a) * d - 1, y + Math.sin(a) * d - 1, 3, 3, '#ffd21f'); }
       circle(x, y, 4, '#ffd21f'); R(x - 1, y - 1, 3, 3, '#c99410');
     },
-    help: (x, y) => {
-      roundButton(x, y, 14, '#3fb43a', true);
+    help: (x, y, r) => {
+      roundButton(x, y, r, '#3fb43a', true);
       circle(x - 4, y - 3, 4, '#ffffff'); circle(x + 4, y - 3, 4, '#ffffff');
       for (let k = 0; k < 7; k++) R(x - 8 + k, y - 1 + k, 17 - 2 * k, 1, '#ffffff');
     },
-    bed: (x, y) => {
-      roundButton(x, y, 14, '#55289a', true);
+    wash: (x, y, r) => {
+      roundButton(x, y, r, '#3fc6e8', true);
+      circle(x - 3, y + 2, 5, '#ffffff'); circle(x + 4, y - 1, 4, '#ffffff'); circle(x + 2, y + 6, 3, '#ffffff'); circle(x - 5, y - 5, 2, '#ffffff');
+      R(x - 4, y + 1, 2, 2, '#bfe6ff'); R(x + 3, y - 2, 2, 2, '#bfe6ff');
+    },
+    chopper: (x, y, r) => {
+      roundButton(x, y, r, '#8fd6ff', true);
+      const c = COLOR.red.c;
+      R(x - 9, y - 6, 18, 1, '#3a3d46'); R(x, y - 5, 1, 2, '#3a3d46');
+      R(x - 4, y - 3, 10, 7, c[1]); R(x - 11, y - 1, 8, 2, c[1]); R(x - 12, y - 3, 2, 4, c[1]); R(x + 2, y - 2, 4, 3, GLASS);
+      R(x - 4, y + 5, 10, 1, '#3a3d46');
+    },
+    stickers: (x, y, r) => {
+      roundButton(x, y, r, '#ff6fb4', true);
+      for (let k = 0; k < 5; k++) { const a = -Math.PI / 2 + k * 2 * Math.PI / 5; for (let d = 0; d < 8; d++) R(x + Math.cos(a) * d - 1, y + Math.sin(a) * d - 1, 3, 3, '#ffffff'); }
+      circle(x, y, 3, '#ffffff'); R(x + 3, y + 4, 3, 3, '#ffd21f');
+    },
+    bed: (x, y, r) => {
+      roundButton(x, y, r, '#55289a', true);
       circle(x - 1, y, 8, '#fff3a6'); circle(x + 3, y - 3, 7, '#55289a');
       text('Z', x + 3, y + 1, 1, '#ffffff'); text('Z', x + 7, y - 5, 1, '#ffffff');
     },
   };
   function drawButtons() {
     for (const b of btns) {
-      const hidden = (bed.on && b.k !== 'bed') || (pendingMission && b.k !== 'bed');
+      const hidden = (bed.on && b.k !== 'bed') || (pendingMission && b.k !== 'bed') || (b.k !== 'bed' && !SCENES[b.k]);
       if (hidden) continue;
-      if (b.k === 'bed' && bed.on) { roundButton(b.x, b.y, 14, '#ffd21f', true); drawSun0(b.x, b.y); continue; }
-      ICONS[b.k](b.x, b.y);
+      if (b.k === 'bed' && bed.on) { roundButton(b.x, b.y, b.r, '#ffd21f', true); drawSun0(b.x, b.y); continue; }
+      ICONS[b.k](b.x, b.y, b.r);
     }
   }
   function drawSun0(x, y) { circle(x, y, 7, '#ff9a3a'); for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; R(x + Math.cos(a) * 10 - 1, y + Math.sin(a) * 10 - 1, 2, 2, '#ff9a3a'); } }
@@ -603,6 +635,7 @@
       drawProps();
       V.forEach((v, i) => { if (v.state === 'parked') drawVehicle(v, i); });
       drawDoors();
+      drawSnowCaps();
       V.forEach((v, i) => { if (v.state !== 'parked') drawVehicle(v, i); });
     },
     drawLit() {

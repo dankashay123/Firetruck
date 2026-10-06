@@ -199,6 +199,7 @@
 
   SCENES.fire = {
     view: [186, 200],   // drawn close up
+    freeTouch: true,    // every touch sprays; clouds don't change the weather here
     layout,
     enter() { F.state = 'arrive'; F.tx = -72; held = null; newFire(); },
     leave() { held = null; spraySound(0); F.state = 'off'; const v = V[VI.fire]; if (v.stopSiren) { v.stopSiren(); v.stopSiren = null; } },

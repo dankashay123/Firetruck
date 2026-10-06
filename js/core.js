@@ -38,10 +38,11 @@ const SKIN = ['#f1c7a0', '#d9a273', '#a86b45', '#7a4a2e'];
 const rand = (a, b) => a + Math.random() * (b - a);
 const pickOne = list => list[Math.random() * list.length | 0];
 const ease = k => k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+// Blend two colors ('#rrggbb' or 'rgb(r,g,b)'), k = 0..1.
 function mix(a, b, k) {
-  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
-  const ch = s => Math.round(((pa >> s) & 255) * (1 - k) + ((pb >> s) & 255) * k);
-  return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+  const rgb = c => c[0] === '#' ? [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)) : c.match(/\d+/g).map(Number);
+  const A = rgb(a), Bc = rgb(b);
+  return `rgb(${A.map((v, i) => Math.round(v * (1 - k) + Bc[i] * k)).join(',')})`;
 }
 
 /* ---------- vehicles (shared by every scene) ---------- */
@@ -388,6 +389,7 @@ function initAudio() {
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   }
   if (ac.state === 'suspended') ac.resume();
+  if (!initAudio.sirens) { initAudio.sirens = true; loadSirens(); }
 }
 function tone(type, freq, start, dur, vol, freqEnd) {
   if (!ac) return;
@@ -427,8 +429,29 @@ function noiseLoop(freq, q) {
     gn.gain.setTargetAtTime(level, ac.currentTime, 0.05);
   };
 }
+// Recorded sirens, if present in audio/ (siren-fire.mp3, siren-police.mp3, siren-amb.mp3).
+const sirenBytes = {}, sirenBuf = {};
+for (const k of ['fire', 'police', 'amb']) {
+  sirenBytes[k] = fetch('audio/siren-' + k + '.mp3').then(r => r.ok ? r.arrayBuffer() : null).catch(() => null);
+}
+function loadSirens() {
+  for (const k in sirenBytes) sirenBytes[k].then(b => b && ac && ac.decodeAudioData(b.slice(0), buf => { sirenBuf[k] = buf; }, () => {}));
+}
 function siren(kind) {
   if (!ac) return () => {};
+  if (sirenBuf[kind]) {   // a real recording, looped
+    const t = ac.currentTime, src = ac.createBufferSource(), gn = ac.createGain();
+    src.buffer = sirenBuf[kind]; src.loop = true;
+    gn.gain.setValueAtTime(0.0001, t); gn.gain.exponentialRampToValueAtTime(0.5, t + 0.2);
+    src.connect(gn); gn.connect(master); src.start(t);
+    let done = false;
+    return () => {
+      if (done) return; done = true;
+      const n = ac.currentTime;
+      gn.gain.cancelScheduledValues(n); gn.gain.setValueAtTime(gn.gain.value, n);
+      gn.gain.exponentialRampToValueAtTime(0.0001, n + 0.5); src.stop(n + 0.55);
+    };
+  }
   const t = ac.currentTime, MAX = 40;
   const o = ac.createOscillator(), f = ac.createBiquadFilter(), gn = ac.createGain();
   const extra = [];
@@ -597,7 +620,52 @@ const DAY_SKY = ['#7ccdff', '#8fd6ff', '#a4deff', '#b9e7ff', '#cdeffd'];
 const NIGHT_SKY = ['#0b0f30', '#111843', '#192254', '#232d66', '#2f3b78'];
 let stars = [], clouds = [];
 const heli = { x: -60, y: 20, hop: 0, boost: 0 };
+const weather = { now: 'clear', k: 0, kind: 'rain', last: 'snow', rainbow: 0, drops: [] };
+const rainSound = noiseLoop(2600, 0.4);
+function cycleWeather() {
+  if (weather.now === 'clear') { weather.now = weather.last === 'rain' ? 'snow' : 'rain'; weather.kind = weather.now; weather.last = weather.now; weather.now === 'snow' ? SFX.chime() : SFX.whoosh(); }
+  else { if (weather.now === 'rain') weather.rainbow = 9; weather.now = 'clear'; SFX.sunrise(); }
+}
+function hitCloud(x, y) {
+  for (const c of clouds) { const r = Math.round(7 * c.s); if (x > c.x - r - 4 && x < c.x + 3 * r + 6 && y > c.y - r - 8 && y < c.y + r + 4) return true; }
+  return false;
+}
+function updateWeather(dt) {
+  const target = weather.now === 'clear' ? 0 : 1;
+  weather.k += Math.sign(target - weather.k) * Math.min(Math.abs(target - weather.k), dt / 1.5);
+  weather.rainbow = Math.max(0, weather.rainbow - dt);
+  rainSound(weather.kind === 'rain' ? 0.08 * weather.k : 0);
+  const want = Math.round(weather.k * (weather.kind === 'rain' ? W * H / 220 : W * H / 500));
+  while (weather.drops.length < want) weather.drops.push({ x: Math.random() * (W + 40) - 20, y: Math.random() * H, v: rand(0.8, 1.2), p: Math.random() * 6 });
+  if (weather.drops.length > want) weather.drops.length = want;
+  for (const d of weather.drops) {
+    if (weather.kind === 'rain') { d.y += 260 * d.v * dt; d.x -= 40 * dt; }
+    else { d.y += 28 * d.v * dt; d.x += Math.sin(T * 1.5 + d.p) * 10 * dt; }
+    if (d.y > H) { d.y = -4; d.x = Math.random() * (W + 40) - 20; }
+  }
+}
+function drawRainbow() {
+  if (weather.rainbow <= 0) return;
+  const a = Math.min(1, weather.rainbow / 2, (9 - weather.rainbow) / 1.5) * 0.8;
+  const cx = W / 2, cy = L.hillY + 20, r0 = Math.round(Math.min(Math.max(W * 0.55, L.hillY * 0.6), 420));
+  const cols = ['#e8222b', '#f57a12', '#ffd21f', '#3fb43a', '#2a6fe0', '#55289a'];
+  alpha(a, () => cols.forEach((c, i) => {
+    const r = r0 - i * 7;
+    for (let dx = -r; dx <= r; dx++) { if (cx + dx < 0 || cx + dx >= W) continue; const h = Math.sqrt(r * r - dx * dx), h2 = Math.sqrt(Math.max(0, (r - 7) ** 2 - dx * dx)); R(cx + dx, cy - h, 1, Math.max(1, h - h2), c); }
+  }));
+}
+function drawWeather() {
+  const k = weather.k;
+  if (k <= 0.01) return;
+  if (weather.kind === 'rain') {
+    alpha(0.12 * k, () => R(0, 0, W, H, '#3a4a6a'));
+    alpha(0.55 * k, () => { for (const d of weather.drops) R(d.x, d.y, 1, 4, '#cfe6ff'); });
+  } else {
+    alpha(0.9 * k, () => { for (const d of weather.drops) { R(d.x, d.y, 2, 2, '#ffffff'); if (d.p > 4) R(d.x - 1, d.y + 1, 4, 1, '#ffffff'); } });
+  }
+}
 function updateSky(dt) {
+  updateWeather(dt);
   if (sky.t < 1) { sky.t = Math.min(1, sky.t + dt / sky.dur); sky.rot = sky.from + (sky.to - sky.from) * ease(sky.t); }
   for (const c of clouds) { c.x += 4 * c.s * dt; if (c.x > W + 30) c.x = -40; }
   heli.hop = Math.max(0, heli.hop - dt); heli.boost = Math.max(0, heli.boost - dt);
@@ -612,7 +680,10 @@ function drawSky(groundY) {
   }
   drawSun(...orbit(Math.PI + sky.rot));
   drawMoon(...orbit(sky.rot));
-  const cc = mix('#ffffff', '#5d6694', k), cs = mix('#dcebf5', '#454d7a', k);
+  drawRainbow();
+  const wg = weather.kind === 'rain' ? weather.k : weather.k * 0.4;
+  if (wg > 0.01) alpha(0.35 * wg, () => R(0, 0, W, groundY + 12, '#8a96a8'));
+  const cc = mix(mix('#ffffff', '#9aa3b4', wg), '#5d6694', k), cs = mix(mix('#dcebf5', '#7d879a', wg), '#454d7a', k);
   for (const c of clouds) {
     const r = Math.round(7 * c.s);
     circle(c.x, c.y + 2, r, cs); circle(c.x + r, c.y - 2, r + 2, cs); circle(c.x + 2 * r + 2, c.y + 2, r, cs);
@@ -848,6 +919,7 @@ function draw() {
   loG.drawImage(worldCv, 0, 0);
   if (k > 0.02) for (const d of vDraws) drawVehicleLights(d, k);
   if (sc.drawLit) sc.drawLit();
+  drawWeather();
   if (sc.drawUI) sc.drawUI();
   drawWipe();
   ctx.imageSmoothingEnabled = false;
@@ -866,6 +938,7 @@ cv.addEventListener('pointerdown', e => {
   if (wipe) return;
   const p = toVirtual(e), sc = SCENES[scene];
   if (hitSky(p.x, p.y)) { setNight(!isNight()); return; }
+  if (!sc.freeTouch && hitCloud(p.x, p.y)) { cycleWeather(); return; }
   if (sc.tap && sc.tap(p.x, p.y, e.pointerId)) return;
   if (hitHeli(p.x, p.y)) { heli.hop = 1; heli.boost = 1.2; SFX.chop(); say('helicopter'); }
 });
