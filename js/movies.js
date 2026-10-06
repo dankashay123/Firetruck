@@ -90,6 +90,7 @@
   }
 
   SCENES.movies = {
+    noWeather: true,
     view: [186, 200],
     freeTouch: true,
     layout,

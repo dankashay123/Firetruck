@@ -904,6 +904,7 @@
     goScene(SCENES.movies ? 'movies' : 'station', { watched: 'fire' });
   }
   SCENES.movieFire = {
+    noWeather: true,   // cutscenes have indoor shots; keep them dry
     view: [186, 200],
     freeTouch: true,
     groundY: () => H,

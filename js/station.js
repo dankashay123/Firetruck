@@ -6,11 +6,12 @@
   const dog = { jump: 0 }, bell = { swing: 0 }, hydrant = { spray: 0 };
   const doors = [0, 0, 0];            // garage door closed amount, 0 open .. 1 closed
   const bed = { on: false, asleep: false, lullaby: 0, sung: 0 };
-  let selected = VI.fire, paintCount = 0;
+  let selected = VI.fire, paintCount = 0, bCache = null, potCache = null;
   let crew = [], seats = [], btns = [], pots = [];
 
   /* ---------- layout ---------- */
   function layout() {
+    bCache = null; potCache = null;
     B.annexW = 18; B.bayW = 76; B.bayGap = 6; B.bayH = 50;
     B.w = B.annexW + 3 * B.bayW + 2 * B.bayGap + 16;
     B.x = Math.floor(L.cx - B.w / 2);
@@ -41,7 +42,7 @@
     const side = B.x - L.safeL >= 100 && B.top - L.safeT < 120;
     btns = kinds.map((k, i) => side
       ? { k, x: L.safeL + 20 + (i % 3) * 32, y: L.safeT + 22 + Math.floor(i / 3) * 32, r: 13 }
-      : { k, x: L.safeL + 24 + (i % 5) * 34, y: L.safeT + 30 + Math.floor(i / 5) * 34, r: 14 });
+      : { k, x: L.safeL + 24 + (i % 5) * 38, y: L.safeT + 30 + Math.floor(i / 5) * 38, r: 16 });
     const twoCol = side;
     B.leftTree = !twoCol && B.x - L.safeL >= 64;
     B.rightTree = W - L.safeR - (B.x + B.w) >= 64;
@@ -305,18 +306,28 @@
 
   /* ---------- draw: building ---------- */
   const BRICK = '#b5523b', MORTAR = '#934130', TRIM = '#efe3c6', TRIM2 = '#c9b893';
+  // The building doesn't change between frames (only the bell swings), so it's drawn once
+  // into an offscreen image after each layout and copied every frame.
   function drawBuilding() {
+    if (!bCache || bCache.width !== W || bCache.height !== H) {
+      bCache = document.createElement('canvas'); bCache.width = W; bCache.height = H;
+      const prev = g; g = bCache.getContext('2d'); drawBuildingStatic(); g = prev;
+    }
+    g.drawImage(bCache, 0, 0);
+    const tx = B.towerX, tt = B.top - 26;
+    const sw = bell.swing > 0 ? Math.round(Math.sin(bell.swing * 14) * 2) : 0;
+    const bx = tx + sw, by = tt + 5;
+    R(bx - 3, by, 6, 2, '#ffd21f'); R(bx - 4, by + 2, 8, 5, '#ffd21f'); R(bx - 5, by + 7, 10, 2, '#e0a81a');
+    R(bx - 2, by + 1, 1, 5, '#fff3a6'); R(bx - sw - 1, by + 9, 2, 2, '#8a6a20');
+  }
+  function drawBuildingStatic() {
     const x = B.x, w = B.w, top = B.top, bot = L.floorY;
-    // bell tower
+    // bell tower (the bell itself is drawn live)
     const tx = B.towerX, tt = top - 26;
     R(tx - 14, tt - 6, 28, 3, TRIM); R(tx - 10, tt - 9, 20, 3, TRIM); R(tx - 5, tt - 12, 10, 3, TRIM);
     R(tx - 12, tt - 3, 24, 30, BRICK);
     R(tx - 8, tt + 2, 16, 18, '#3a3442'); R(tx - 8, tt + 2, 16, 1, '#2a2530');
-    const sw = bell.swing > 0 ? Math.round(Math.sin(bell.swing * 14) * 2) : 0;
-    const bx = tx + sw, by = tt + 5;
     R(tx - 1, tt + 2, 2, 3, '#6b5a3a');
-    R(bx - 3, by, 6, 2, '#ffd21f'); R(bx - 4, by + 2, 8, 5, '#ffd21f'); R(bx - 5, by + 7, 10, 2, '#e0a81a');
-    R(bx - 2, by + 1, 1, 5, '#fff3a6'); R(bx - sw - 1, by + 9, 2, 2, '#8a6a20');
     // brick walls
     R(x, top, w, bot - top, BRICK);
     for (let yy = top + 3; yy < bot; yy += 4) {
@@ -550,19 +561,24 @@
     R(cx - 2, ty, 5, 5, '#ffd21f'); R(cx - 5, ty + 5, 11, 1, '#ffd21f'); R(cx - 4, ty + 6, 9, 1, '#ffd21f');
     R(cx - 3, ty + 7, 7, 1, '#ffd21f'); R(cx - 2, ty + 8, 5, 1, '#ffd21f'); R(cx - 1, ty + 9, 3, 1, '#ffd21f');
   }
-  function drawPalette() {
-    drawStrip();
-    const cur = V[selected].color, r = Math.floor(L.blob / 2);
-    for (const p of pots) {
-      const c = COLOR[p.key].c, on = p.key === cur;
-      const cy = p.cy - (on ? 2 : 0);
-      if (on) circle(p.cx, cy, r + 3, '#ffffff');
-      circle(p.cx, cy + 2, r, '#2f6b29');
-      circle(p.cx, cy, r, c[2]);
-      circle(p.cx, cy - 1, r - 1, c[1]);
-      circle(p.cx - Math.floor(r / 3), cy - Math.floor(r / 3), Math.max(2, Math.floor(r / 4)), c[0]);
-    }
+  function drawPot(p, raised) {
+    const c = COLOR[p.key].c, r = Math.floor(L.blob / 2), cy = p.cy - (raised ? 2 : 0);
+    if (raised) circle(p.cx, cy, r + 3, '#ffffff');
+    circle(p.cx, cy + 2, r, '#2f6b29');
+    circle(p.cx, cy, r, c[2]);
+    circle(p.cx, cy - 1, r - 1, c[1]);
+    circle(p.cx - Math.floor(r / 3), cy - Math.floor(r / 3), Math.max(2, Math.floor(r / 4)), c[0]);
   }
+  function drawPalette() {
+    if (!potCache || potCache.width !== W || potCache.height !== H) {
+      potCache = document.createElement('canvas'); potCache.width = W; potCache.height = H;
+      const prev = g; g = potCache.getContext('2d'); drawStrip(); for (const p of pots) drawPot(p, false); g = prev;
+    }
+    g.drawImage(potCache, 0, 0);
+    const sel = pots.find(p => p.key === V[selected].color);
+    if (sel) { const r = Math.floor(L.blob / 2); R(sel.cx - r - 1, sel.cy - r, 2 * r + 3, 2 * r + 5, '#5aa84c'); drawPot(sel, true); }
+  }
+
   const ICONS = {
     fire: (x, y, r) => { roundButton(x, y, r, '#e8222b', true); flame(x, y + 9, 1.15, 1); },
     amb: (x, y, r) => { roundButton(x, y, r, '#f4f7fb', true); R(x - 2, y - 8, 5, 16, '#e8222b'); R(x - 8, y - 2, 16, 5, '#e8222b'); },

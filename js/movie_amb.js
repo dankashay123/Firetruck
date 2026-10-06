@@ -986,6 +986,7 @@
   }
 
   SCENES.movieAmb = {
+    noWeather: true,   // cutscenes have indoor shots; keep them dry
     view: [186, 200],
     freeTouch: true,
     layout, enter, leave, update,

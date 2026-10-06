@@ -874,6 +874,7 @@
 
   /* ---------- scene ---------- */
   SCENES.moviePolice = {
+    noWeather: true,   // cutscenes have indoor shots; keep them dry
     view: [186, 200],
     freeTouch: true,
     groundY: () => Math.round(H * 0.75),

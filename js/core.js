@@ -634,7 +634,7 @@ function updateWeather(dt) {
   const target = weather.now === 'clear' ? 0 : 1;
   weather.k += Math.sign(target - weather.k) * Math.min(Math.abs(target - weather.k), dt / 1.5);
   weather.rainbow = Math.max(0, weather.rainbow - dt);
-  rainSound(weather.kind === 'rain' ? 0.08 * weather.k : 0);
+  rainSound(weather.kind === 'rain' && !SCENES[scene].noWeather ? 0.08 * weather.k : 0);
   const want = Math.round(weather.k * (weather.kind === 'rain' ? W * H / 220 : W * H / 500));
   while (weather.drops.length < want) weather.drops.push({ x: Math.random() * (W + 40) - 20, y: Math.random() * H, v: rand(0.8, 1.2), p: Math.random() * 6 });
   if (weather.drops.length > want) weather.drops.length = want;
@@ -919,7 +919,7 @@ function draw() {
   loG.drawImage(worldCv, 0, 0);
   if (k > 0.02) for (const d of vDraws) drawVehicleLights(d, k);
   if (sc.drawLit) sc.drawLit();
-  drawWeather();
+  if (!sc.noWeather) drawWeather();   // indoor scenes stay dry
   if (sc.drawUI) sc.drawUI();
   drawWipe();
   ctx.imageSmoothingEnabled = false;
