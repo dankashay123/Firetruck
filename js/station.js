@@ -62,15 +62,15 @@
     for (const f of B.floors) {
       const w = f.x1 - f.x0;
       f.door = f.x0 + 18;                       // stairwell door on the back wall
-      f.walk = [f.x0 + 12, f.x1 - 10];
+      f.walk = [f.x0 + 14, f.x1 - 12];
       if (f.i === 0) {                          // crew room: table and kitchen
-        f.table = Math.round(f.x0 + w * 0.40); f.tw = 40;
-        seats.push({ f: 0, x: f.table - 6, dir: 1, kind: 'chair', who: null });
-        seats.push({ f: 0, x: f.table + f.tw + 6, dir: -1, kind: 'chair', who: null });
+        f.table = Math.round(f.x0 + w * 0.38); f.tw = 46;
+        seats.push({ f: 0, x: f.table - 8, dir: 1, kind: 'chair', who: null });
+        seats.push({ f: 0, x: f.table + f.tw + 8, dir: -1, kind: 'chair', who: null });
       } else {                                  // bunk room: bunks, lockers, couch and TV
-        f.bunk = f.x0 + 40; f.locker = f.x0 + 82; f.couch = f.x1 - 76;
-        seats.push({ f: 1, x: f.couch + 12, dir: 1, kind: 'couch', who: null });
-        seats.push({ f: 1, x: f.couch + 27, dir: 1, kind: 'couch', who: null });
+        f.bunk = f.x0 + 38; f.locker = f.x0 + 84; f.couch = f.x1 - 82;
+        seats.push({ f: 1, x: f.couch + 11, dir: 1, kind: 'couch', who: null });
+        seats.push({ f: 1, x: f.couch + 29, dir: 1, kind: 'couch', who: null });
       }
     }
   }
@@ -142,7 +142,7 @@
           }
           break;
         case 'wake': if ((p.t -= dt) <= 0) p.state = 'sleep'; break;
-        case 'sleep': if (Math.random() < dt * 0.5) zzz(p.x - 4, f.fy - 16); break;
+        case 'sleep': if (Math.random() < dt * 0.5) zzz(f.bunk + 12, f.fy - 22); break;
       }
       if (p.appear) p.appear = Math.max(0, p.appear - dt);
     }
@@ -150,8 +150,10 @@
   function crewHit(x, y) {
     for (const p of crew) {
       if (p.state === 'gone') continue;
-      const yb = p.state === 'sleep' || p.state === 'wake' ? floorOf(p).fy - 6 : p.y;
-      if (x > p.x - 7 && x < p.x + 7 && y > yb - 19 && y < yb + 2) return p;
+      const f = floorOf(p), lying = p.state === 'sleep' || p.state === 'wake';
+      const yb = lying ? f.fy - 8 : p.state === 'sit' ? f.fy - 8 + 10 : p.y;
+      const hx = lying ? f.bunk + 18 : p.x, hw = lying ? 18 : 9;
+      if (x > hx - hw && x < hx + hw && y > yb - 26 && y < yb + 3) return p;
     }
     return null;
   }
@@ -259,7 +261,7 @@
     }
     if (Math.random() < dt * 1.5 && !bed.asleep && B.floors[0]) {   // steam from the cooking pot
       const f = B.floors[0];
-      parts.push({ x: f.x1 - 32 + rand(-2, 2), y: f.fy - 18, vx: rand(-3, 3), vy: -10, g: 0, life: 1.2, max: 1.2, s: 2, c: '#ffffff' });
+      parts.push({ x: f.x1 - 33 + rand(-2, 2), y: f.fy - 24, vx: rand(-3, 3), vy: -10, g: 0, life: 1.2, max: 1.2, s: 2, c: '#ffffff' });
     }
   }
 
@@ -332,7 +334,9 @@
     // pole shaft and side door
     R(x + 3, B.signTop, 13, bot - B.signTop, '#cdb48a'); R(x + 3, B.signTop, 1, bot - B.signTop, '#b39a70');
     R(B.poleX - 1, B.signTop, 2, bot - B.signTop - 2, '#e0b010'); R(B.poleX - 1, B.signTop, 1, bot - B.signTop - 2, '#fff3a6');
-    R(x + 1, bot - 21, 16, 21, TRIM); R(x + 3, bot - 19, 12, 19, '#6b4a2e'); R(x + 12, bot - 10, 2, 2, '#ffd21f');
+    R(x + 1, bot - 28, 16, 28, TRIM); R(x + 3, bot - 26, 12, 26, '#6b4a2e'); R(x + 12, bot - 13, 2, 2, '#ffd21f');
+    // wall lamps beside the bays (lit at night)
+    for (const lx of lampXs()) { R(lx - 2, B.bayTop - 9, 5, 2, '#3a3d46'); R(lx - 1, B.bayTop - 7, 3, 3, '#fff3a6'); }
     // garage bays
     B.bays.forEach(bx2 => {
       R(bx2 - 2, B.bayTop - 2, B.bayW + 4, B.bayH + 2, TRIM);
@@ -371,7 +375,8 @@
       R(wx + ww / 2, wy, 1, wh, '#ffffff');
     }
     // stairwell door
-    R(f.door - 6, f.fy - 22, 13, 22, '#d9c4a0'); R(f.door - 5, f.fy - 21, 11, 21, '#8a5a3a'); R(f.door + 3, f.fy - 11, 1, 2, '#ffd21f');
+    const dh = Math.min(27, h - 3);
+    R(f.door - 7, f.fy - dh, 15, dh, '#d9c4a0'); R(f.door - 6, f.fy - dh + 1, 13, dh - 1, '#8a5a3a'); R(f.door + 4, f.fy - 13, 1, 2, '#ffd21f');
     // fire pole through the floor
     R(B.poleX - 3, f.fy, 6, 4, '#2a2530');
     R(B.poleX - 1, f.top, 2, h + 4, '#e0b010'); R(B.poleX - 1, f.top, 1, h + 4, '#fff3a6');
@@ -390,56 +395,56 @@
     // clock
     if (h > 30) { const cx = f.x1 - 76, cy = f.top + 12; circle(cx, cy, 4, '#ffffff'); R(cx, cy - 3, 1, 3, INK); R(cx, cy, 2, 1, INK); }
     // table, chairs, bowls
-    for (const s of seats.filter(s => s.f === 0)) {
-      R(s.x - 4, fy - 7, 8, 2, '#8a5a3a'); R(s.x - 3, fy - 5, 1, 5, '#6b4a2e'); R(s.x + 2, fy - 5, 1, 5, '#6b4a2e');
-      R(s.dir > 0 ? s.x - 5 : s.x + 4, fy - 16, 2, 16, '#6b4a2e');
+    for (const sx of seats.filter(q => q.f === 0)) {
+      R(sx.x - 5, fy - 9, 11, 2, '#8a5a3a'); R(sx.x - 4, fy - 7, 1, 7, '#6b4a2e'); R(sx.x + 4, fy - 7, 1, 7, '#6b4a2e');
+      R(sx.dir > 0 ? sx.x - 7 : sx.x + 6, fy - 24, 2, 24, '#6b4a2e');
     }
-    R(tx, fy - 10, tw, 3, '#a8703f'); R(tx, fy - 8, tw, 1, '#8a5a3a'); R(tx + 2, fy - 7, 2, 7, '#8a5a3a'); R(tx + tw - 4, fy - 7, 2, 7, '#8a5a3a');
-    R(tx + 3, fy - 12, 7, 2, '#f4f7fb'); R(tx + 4, fy - 13, 5, 1, '#f57a12');
-    R(tx + tw - 10, fy - 12, 7, 2, '#f4f7fb'); R(tx + tw - 9, fy - 13, 5, 1, '#3fb43a');
-    R(tx + tw / 2 - 2, fy - 16, 4, 6, '#ffffff'); R(tx + tw / 2 - 2, fy - 13, 4, 2, '#2a6fe0');
+    R(tx, fy - 15, tw, 3, '#a8703f'); R(tx, fy - 12, tw, 1, '#8a5a3a'); R(tx + 3, fy - 11, 2, 11, '#8a5a3a'); R(tx + tw - 5, fy - 11, 2, 11, '#8a5a3a');
+    R(tx + 3, fy - 18, 9, 3, '#f4f7fb'); R(tx + 4, fy - 19, 7, 1, '#f57a12');
+    R(tx + tw - 12, fy - 18, 9, 3, '#f4f7fb'); R(tx + tw - 11, fy - 19, 7, 1, '#3fb43a');
+    R(tx + tw / 2 - 3, fy - 24, 6, 9, '#ffffff'); R(tx + tw / 2 - 3, fy - 20, 6, 3, '#2a6fe0');
     // kitchen
-    const kx = f.x1 - 62;
-    R(kx, fy - 12, 22, 12, '#b07a4a'); R(kx, fy - 13, 22, 2, '#d9b98f'); R(kx + 10, fy - 9, 2, 1, '#e9eef2');
-    R(kx + 22, fy - 12, 18, 12, '#c9cdd3'); R(kx + 22, fy - 13, 18, 1, '#5a5f6e'); R(kx + 25, fy - 9, 12, 6, '#3a3d46');
-    R(kx + 26, fy - 18, 10, 5, '#5a5f6e'); R(kx + 25, fy - 18, 12, 1, '#7d8290');
-    const fh = Math.min(30, h - 6);
-    R(f.x1 - 20, fy - fh, 15, fh, '#e9eef2'); R(f.x1 - 20, fy - fh + 10, 15, 1, '#b4bec8'); R(f.x1 - 18, fy - fh + 4, 1, 4, '#7d8290'); R(f.x1 - 18, fy - fh + 13, 1, 5, '#7d8290');
-    if (h > 48) { R(kx, f.top + 6, 40, 9, '#b07a4a'); R(kx + 19, f.top + 6, 1, 9, '#8a5a3a'); R(kx + 8, f.top + 12, 3, 1, '#e9eef2'); R(kx + 28, f.top + 12, 3, 1, '#e9eef2'); }
+    const kx = f.x1 - 66;
+    R(kx, fy - 15, 24, 15, '#b07a4a'); R(kx, fy - 16, 24, 2, '#d9b98f'); R(kx + 11, fy - 11, 2, 1, '#e9eef2');
+    R(kx + 24, fy - 15, 18, 15, '#c9cdd3'); R(kx + 24, fy - 16, 18, 1, '#5a5f6e'); R(kx + 27, fy - 11, 12, 7, '#3a3d46');
+    R(kx + 28, fy - 22, 10, 6, '#5a5f6e'); R(kx + 27, fy - 22, 12, 1, '#7d8290');
+    const fh = Math.min(34, h - 4);
+    R(f.x1 - 22, fy - fh, 17, fh, '#e9eef2'); R(f.x1 - 22, fy - fh + 12, 17, 1, '#b4bec8'); R(f.x1 - 20, fy - fh + 4, 1, 5, '#7d8290'); R(f.x1 - 20, fy - fh + 15, 1, 6, '#7d8290');
+    if (h > 52) { R(kx, f.top + 6, 42, 10, '#b07a4a'); R(kx + 20, f.top + 6, 1, 10, '#8a5a3a'); R(kx + 8, f.top + 13, 3, 1, '#e9eef2'); R(kx + 30, f.top + 13, 3, 1, '#e9eef2'); }
   }
   function drawBunkRoom(f) {
     const fy = f.fy, bx = f.bunk;
     // bunk bed
-    R(bx, fy - 28, 2, 28, '#8a5a3a'); R(bx + 34, fy - 28, 2, 28, '#8a5a3a');
-    R(bx + 2, fy - 9, 32, 3, '#f4f7fb'); R(bx + 2, fy - 6, 32, 2, '#8a5a3a');
-    R(bx + 2, fy - 24, 32, 3, '#f4f7fb'); R(bx + 2, fy - 21, 32, 2, '#8a5a3a');
-    R(bx + 3, fy - 12, 7, 3, '#ffffff'); R(bx + 3, fy - 27, 7, 3, '#ffffff');
-    R(bx + 12, fy - 26, 21, 2, '#3fb43a');
-    circle(bx + 24, fy - 28, 3, '#a8703f'); circle(bx + 22, fy - 31, 1, '#a8703f'); circle(bx + 26, fy - 31, 1, '#a8703f'); R(bx + 23, fy - 28, 1, 1, INK); // teddy
-    // lockers with jackets
+    R(bx, fy - 34, 2, 34, '#8a5a3a'); R(bx + 36, fy - 34, 2, 34, '#8a5a3a');
+    R(bx + 2, fy - 11, 34, 4, '#f4f7fb'); R(bx + 2, fy - 7, 34, 2, '#8a5a3a');
+    R(bx + 2, fy - 29, 34, 4, '#f4f7fb'); R(bx + 2, fy - 25, 34, 2, '#8a5a3a');
+    R(bx + 3, fy - 14, 8, 3, '#ffffff'); R(bx + 3, fy - 32, 8, 3, '#ffffff');
+    R(bx + 13, fy - 31, 22, 2, '#3fb43a');
+    circle(bx + 26, fy - 34, 4, '#a8703f'); circle(bx + 23, fy - 38, 2, '#a8703f'); circle(bx + 29, fy - 38, 2, '#a8703f'); R(bx + 27, fy - 35, 1, 1, INK); R(bx + 25, fy - 35, 1, 1, INK); // teddy
+    // lockers with helmets on top
     const lx = f.locker;
-    for (let k = 0; k < 3; k++) { R(lx + k * 9, fy - 26, 8, 26, '#7d8aa0'); R(lx + k * 9 + 1, fy - 24, 6, 1, '#5d6a80'); R(lx + k * 9 + 1, fy - 22, 6, 1, '#5d6a80'); R(lx + k * 9 + 6, fy - 14, 1, 3, '#cfd6dd'); }
-    R(lx, fy - 30, 7, 3, '#e8222b'); R(lx + 9, fy - 30, 7, 3, '#e8222b');
+    for (let k = 0; k < 3; k++) { R(lx + k * 10, fy - 30, 9, 30, '#7d8aa0'); R(lx + k * 10 + 1, fy - 28, 7, 1, '#5d6a80'); R(lx + k * 10 + 1, fy - 26, 7, 1, '#5d6a80'); R(lx + k * 10 + 7, fy - 16, 1, 4, '#cfd6dd'); }
+    R(lx, fy - 34, 8, 4, '#e8222b'); R(lx - 1, fy - 31, 10, 1, '#e8222b'); R(lx + 10, fy - 34, 8, 4, '#e8222b'); R(lx + 9, fy - 31, 10, 1, '#e8222b');
     // couch and TV
     const cx = f.couch;
-    R(cx, fy - 18, 4, 18, '#a8403d'); R(cx, fy - 9, 38, 6, '#c0504d'); R(cx + 34, fy - 12, 4, 9, '#a8403d'); R(cx + 2, fy - 3, 2, 3, '#6b2a28'); R(cx + 33, fy - 3, 2, 3, '#6b2a28');
-    const tvx = f.x1 - 26;
-    R(tvx, fy - 10, 20, 10, '#8a5a3a');
-    R(tvx + 1, fy - 24, 18, 13, '#2f3240');
+    R(cx, fy - 22, 5, 22, '#a8403d'); R(cx, fy - 9, 40, 6, '#c0504d'); R(cx, fy - 9, 40, 1, '#d8706d'); R(cx + 36, fy - 13, 5, 10, '#a8403d'); R(cx + 2, fy - 3, 2, 3, '#6b2a28'); R(cx + 36, fy - 3, 2, 3, '#6b2a28');
+    const tvx = f.x1 - 28;
+    R(tvx, fy - 12, 22, 12, '#8a5a3a');
+    R(tvx + 1, fy - 28, 20, 15, '#2f3240');
     const ch = Math.floor(T * 1.5) % 3;
-    R(tvx + 2, fy - 23, 16, 11, ['#8fd6ff', '#3fb43a', '#ffd21f'][ch]);
-    R(tvx + 5, fy - 17, 9, 3, '#e8222b'); R(tvx + 6, fy - 14, 2, 1, INK); R(tvx + 11, fy - 14, 2, 1, INK);
+    R(tvx + 2, fy - 27, 18, 13, ['#8fd6ff', '#3fb43a', '#ffd21f'][ch]);
+    R(tvx + 5, fy - 21, 11, 4, '#e8222b'); R(tvx + 13, fy - 23, 3, 2, '#e8222b'); R(tvx + 6, fy - 17, 2, 2, INK); R(tvx + 13, fy - 17, 2, 2, INK);
   }
   function drawSleeper(p, f) {
     const bx = f.bunk, fy = f.fy, breathe = Math.floor(T * 1.2 + p.seed) % 2;
     if (p.state === 'wake') {
-      drawPerson({ type: p.type, x: bx + 10, yb: fy - 7, dir: 1, pose: 'wave', skin: p.skin, hair: p.hair, seed: p.seed });
-      R(bx + 14, fy - 12, 19, 3, '#3a6fd8');
+      drawPerson({ type: p.type, x: bx + 12, yb: fy - 11, dir: 1, pose: 'sit', skin: p.skin, hair: p.hair, seed: p.seed });
+      R(bx + 20, fy - 15, 15, 4, '#3a6fd8');
       return;
     }
-    circle(bx + 7, fy - 12, 3, p.skin); R(bx + 4, fy - 15, 6, 2, p.hair);
-    R(bx + 8, fy - 12, 1, 1, INK);
-    R(bx + 10, fy - 13 + breathe, 23, 4 - breathe, '#3a6fd8'); R(bx + 10, fy - 13 + breathe, 23, 1, '#6f9cf0');
+    circle(bx + 9, fy - 15, 4, p.skin); R(bx + 5, fy - 19, 8, 3, p.hair); R(bx + 5, fy - 17, 2, 3, p.hair);
+    R(bx + 10, fy - 16, 2, 1, INK); R(bx + 12, fy - 13, 1, 1, '#ff9c8a');
+    R(bx + 13, fy - 16 + breathe, 22, 5 - breathe, '#3a6fd8'); R(bx + 13, fy - 16 + breathe, 22, 1, '#6f9cf0');
   }
   function drawCrew(onFloor) {
     for (const p of crew) {
@@ -451,7 +456,8 @@
       if (!sliding && onFloor !== f.i) continue;
       const hop = p.hop > 0 ? Math.sin(p.hop / 0.5 * Math.PI) * 5 : 0;
       let pose = p.wave > 0 ? 'wave' : 'stand', yb = p.y;
-      if (p.state === 'sit') { pose = p.wave > 0 ? 'wave' : (p.seat.kind === 'chair' ? 'eat' : 'sit'); yb = f.fy - (p.seat.kind === 'chair' ? 6 : 5); }
+      if (p.state === 'sit') { pose = p.wave > 0 ? 'wave' : (p.seat.kind === 'chair' ? 'eat' : 'sit'); yb = f.fy - 8; }
+      if (p.state === 'sit' && pose === 'wave') pose = 'sit';
       if (p.state === 'slide') pose = 'slide';
       const draw = () => drawPerson({ type: p.type, x: p.x, yb, dir: p.dir, pose, walk: p.state === 'walk' || p.state === 'exit', skin: p.skin, hair: p.hair, seed: p.seed, hop });
       if (p.appear) alpha(1 - p.appear / 0.6, draw); else draw();
@@ -490,7 +496,35 @@
     const moving = v.state !== 'parked';
     let bob = (v.state === 'drive' || v.state === 'arrive') ? (Math.floor(v.x / 7) % 2 ? 0 : -1) : 0;
     if (v.hop > 0) bob -= Math.round(Math.sin(v.hop / 0.35 * Math.PI) * 4);
-    drawV(i, v.x, v.y, moving, bob);
+    drawV(i, v.x, v.y, moving, bob, v.rot, v.state === 'parked' && doors[i] > 0.5);
+  }
+
+  /* ---------- night lights ---------- */
+  function lampXs() { return [B.x + 9, ...B.bays.map(b => b - 4), B.bays[2] + B.bayW + 4]; }
+  function cone(cx, y, len, spread, a, c) {
+    for (let j = 0; j < len; j++) { const half = 1 + j * spread; alpha(a * (1 - j / (len + 2)), () => R(cx - half, y + j, half * 2 + 1, 1, c)); }
+  }
+  function drawBuildingLights(k) {
+    // wall lamps
+    for (const lx of lampXs()) {
+      alpha(k, () => R(lx - 1, B.bayTop - 7, 3, 3, '#fffbe0'));
+      alpha(0.4 * k, () => circle(lx, B.bayTop - 6, 4, '#fff3b0'));
+      cone(lx, B.bayTop - 4, 16, 0.55, 0.22 * k, '#ffe9a0');
+    }
+    // lights inside the open bays
+    B.bays.forEach((bx, i) => {
+      if (doors[i] > 0.3 || bed.asleep) return;
+      const cx = bx + B.bayW / 2;
+      alpha(k, () => R(cx - 4, B.bayTop + 8, 9, 2, '#fffbe0'));
+      cone(cx, B.bayTop + 10, B.bayH - 13, 0.7, 0.16 * k, '#fff3b0');
+    });
+    // the sign glows
+    const signW = 104, sx = Math.floor(B.mainX + (B.w - B.annexW - signW) / 2);
+    alpha(0.25 * k, () => R(sx - 4, B.signTop + 1, signW + 8, 20, '#ff9a3a'));
+    alpha(k, () => { R(sx, B.signTop + 4, signW, 14, '#9a2424'); text('FIRE STATION', sx + 5, B.signTop + 6, 2, '#fff6e0'); });
+    // bell tower lamp
+    alpha(0.35 * k, () => circle(B.towerX, B.top - 16, 10, '#ffe873'));
+    alpha(k * 0.8, () => { R(B.towerX - 3, B.top - 21, 6, 2, '#ffd21f'); R(B.towerX - 4, B.top - 19, 8, 5, '#ffd21f'); R(B.towerX - 5, B.top - 14, 10, 2, '#e0a81a'); });
   }
 
   /* ---------- draw: UI ---------- */
@@ -572,6 +606,8 @@
       V.forEach((v, i) => { if (v.state !== 'parked') drawVehicle(v, i); });
     },
     drawLit() {
+      const k = nightK();
+      if (k > 0.02) drawBuildingLights(k);
       if (!bed.asleep) for (const f of B.floors) { drawRoom(f, true); drawCrew(f.i); }
       drawCrew('down');
       drawParticles();

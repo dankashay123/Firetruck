@@ -8,20 +8,24 @@
   const spraySound = noiseLoop(1400, 0.7);
 
   function layout() {
+    const uw = W - L.safeL - L.safeR;
     F.rowH = 32; F.colW = 40;
-    F.rows = Math.max(2, Math.min(5, Math.floor((L.floorY - L.safeT - 70) / F.rowH)));
-    F.hw = 3 * F.colW + 14; F.hh = F.rows * F.rowH + 4;
+    F.cols = uw >= 260 ? 3 : 2;
+    F.doorCol = F.cols === 3 ? 1 : 0;
+    F.rows = Math.max(2, Math.min(6, Math.floor((L.floorY - L.safeT - 60) / F.rowH)));
+    F.hw = F.cols * F.colW + 14; F.hh = F.rows * F.rowH + 4;
     const group = 66 + 8 + 12 + 22 + F.hw;            // truck, firefighter, house
-    const spare = W - L.safeL - L.safeR - group;
-    F.x0 = Math.floor(L.safeL + Math.max(4, Math.min(spare / 2, spare - 52)));
+    const spare = uw - group;
+    if (spare >= 0) F.x0 = Math.floor(L.safeL + Math.max(4, Math.min(spare / 2, spare - 52)));
+    else F.x0 = W - L.safeR - 6 - F.hw - (66 + 8 + 12 + 22);   // narrow screen: the truck pokes in from the left edge
     F.truckX = F.x0; F.ffX = F.x0 + 74; F.hx = F.x0 + 74 + 12 + 22; F.hy = L.floorY - F.hh;
-    F.nozX = F.ffX + 14; F.nozY = L.laneY - 15;
+    F.nozX = F.ffX + 18; F.nozY = L.laneY - 11;
     // spots for trees and bushes around the house
     F.trees = [];
     const right = F.hx + F.hw + 22, rightEdge = W - L.safeR - 12;
     if (right <= rightEdge) F.trees.push({ x: right, r: 13 });
     if (right + 44 <= rightEdge) F.trees.push({ x: right + 44, r: 11 });
-    if (F.x0 - 30 >= L.safeL + 10) F.trees.push({ x: F.x0 - 24, r: 12 });
+    F.trees.push({ x: F.x0 - 30 >= L.safeL + 10 ? F.x0 - 24 : Math.max(L.safeL + 16, F.truckX + 32), r: 12 });
     F.bushes = [{ x: F.hx - 9 }];
     if (right - 13 <= rightEdge) F.bushes.push({ x: F.hx + F.hw + 6 });
     if (F.state !== 'arrive') F.tx = F.truckX;
@@ -37,7 +41,7 @@
   }
   function newFire() {
     const wins = [];
-    for (let r = 0; r < F.rows; r++) for (let c = 0; c < 3; c++) if (!(r === 0 && c === 1)) wins.push({ r, c });
+    for (let r = 0; r < F.rows; r++) for (let c = 0; c < F.cols; c++) if (!(r === 0 && c === F.doorCol)) wins.push({ r, c });
     wins.sort(() => Math.random() - 0.5);
     const n = Math.min(wins.length, 3 + (Math.random() * (F.rows > 2 ? 4 : 2) | 0));
     const mk = o => Object.assign({ out: false, seed: Math.random() * 10, who: Math.random() * 3 | 0, skin: pickOne(SKIN), outT: 0 }, o);
@@ -120,12 +124,12 @@
     R(hx, hy, hw, F.hh, F.wall);
     alpha(0.15, () => { R(hx, hy, 3, F.hh, '#000000'); R(hx + hw - 3, hy, 3, F.hh, '#000000'); });
     for (let r = 1; r < F.rows; r++) R(hx, L.floorY - r * F.rowH, hw, 1, '#ffffff');
-    const dx = hx + 9 + F.colW;
+    const dx = hx + 9 + F.doorCol * F.colW;
     R(dx - 1, L.floorY - 25, 24, 25, '#ffffff'); R(dx, L.floorY - 24, 22, 24, '#8a5a3a');
     R(dx + 3, L.floorY - 21, 16, 8, '#9c6a48'); R(dx + 17, L.floorY - 12, 2, 2, '#ffd21f');
     // windows that were never on fire
-    for (let r = 0; r < F.rows; r++) for (let c = 0; c < 3; c++) {
-      if (r === 0 && c === 1) continue;
+    for (let r = 0; r < F.rows; r++) for (let c = 0; c < F.cols; c++) {
+      if (r === 0 && c === F.doorCol) continue;
       if (F.targets.some(t => t.kind === 'window' && t.r === r && t.c === c)) continue;
       const w = windowBox(r, c);
       R(w.x - 2, w.y - 2, w.w + 4, w.h + 4, '#ffffff'); R(w.x, w.y, w.w, w.h, GLASS); R(w.x + 2, w.y + 2, 4, 2, '#ffffff'); R(w.x + 10, w.y, 2, w.h, '#ffffff');
@@ -177,9 +181,9 @@
     for (const t of F.targets) ({ window: drawWindowTarget, tree: drawTreeTarget, bush: drawBushTarget })[t.kind](t, lit);
   }
   function drawFirefighter(x, yb) {
-    drawPerson({ type: 'ff', x: x + 5, yb, dir: 1, pose: F.state === 'done' ? 'cheer' : 'carry', skin: SKIN[0], seed: 1 });
-    R(x + 11, yb - 9, 4, 3, '#9aa3ad');
-    R(x, yb - 13, 2, 11, '#3a3d46');
+    R(x - 1, yb - 14, 2, 12, '#3a3d46');
+    drawPerson({ type: 'ff', x: x + 6, yb, dir: 1, pose: F.state === 'done' ? 'cheer' : 'carry', skin: SKIN[0], seed: 1 });
+    if (F.state !== 'done') R(x + 12, yb - 12, 5, 3, '#9aa3ad');
   }
   function drawStream() {
     const nx = F.nozX, ny = F.nozY, tx = F.aimX, ty = F.aimY;
@@ -194,6 +198,7 @@
   }
 
   SCENES.fire = {
+    view: [186, 200],   // drawn close up
     layout,
     enter() { F.state = 'arrive'; F.tx = -72; held = null; newFire(); },
     leave() { held = null; spraySound(0); F.state = 'off'; const v = V[VI.fire]; if (v.stopSiren) { v.stopSiren(); v.stopSiren = null; } },

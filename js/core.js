@@ -102,7 +102,7 @@ function drawFire(x, yb, key, lit, ph, bob, rot) {
   const P = (dx, dy, w, h, col) => R(x + dx, y + dy, w, h, col);
   const stripe = key === 'white' ? '#e8222b' : '#f4f7fb';
   P(2, 29, 62, 3, '#2b2e36');                                   // chassis
-  P(0, 12, 46, 18, c[1]); P(0, 12, 46, 1, c[0]); P(0, 28, 46, 2, c[2]);
+  P(0, 12, 46, 18, c[1]); P(0, 12, 46, 1, c[0]); P(0, 28, 46, 2, c[2]); P(0, 17, 1, 4, '#c0302a');
   for (let i = 0; i < 3; i++) {                                  // equipment lockers
     const dx = 3 + i * 14;
     P(dx, 15, 12, 10, c[2]); P(dx + 1, 16, 10, 8, c[1]);
@@ -153,7 +153,7 @@ function drawAmb(x, yb, key, lit, ph, bob, rot) {
   const P = (dx, dy, w, h, col) => R(x + dx, y + dy, w, h, col);
   const warm = WARM.has(key);
   const stripe = warm ? '#f4f7fb' : '#e8222b', cross = warm ? '#ffffff' : '#e8222b';
-  P(0, 6, 42, 24, c[1]); P(0, 6, 42, 1, c[0]); P(0, 28, 42, 2, c[2]);   // patient box
+  P(0, 6, 42, 24, c[1]); P(0, 6, 42, 1, c[0]); P(0, 28, 42, 2, c[2]); P(0, 15, 1, 5, '#c0302a');   // patient box
   P(42, 12, 16, 18, c[1]); P(58, 15, 3, 15, c[1]); P(42, 12, 16, 1, c[0]); P(42, 28, 19, 2, c[2]);  // cab
   P(45, 14, 11, 7, GLASS); P(46, 15, 2, 2, '#ffffff'); P(56, 15, 2, 6, GLASS2);
   P(44, 22, 1, 6, c[2]); P(47, 24, 3, 1, '#9aa3ad');
@@ -170,24 +170,111 @@ function drawAmb(x, yb, key, lit, ph, bob, rot) {
 }
 const SPRITE = { fire: drawFire, police: drawPolice, amb: drawAmb };
 // Draw vehicle i of V anywhere (missions use this so the painted color follows the truck).
-function drawV(i, x, yb, lit, bob = 0, rot = V[i].rot) {
+// At night the engine adds headlight beams, taillights and light-bar glow on top of every
+// vehicle drawn this way; pass dark=true for one that's hidden (e.g. behind a closed door).
+let vDraws = [];
+function drawV(i, x, yb, lit, bob = 0, rot = V[i].rot, dark = false) {
   SPRITE[V[i].kind](Math.floor(x), Math.floor(yb), V[i].color, lit, Math.floor(T * 7) % 2, bob, rot);
+  if (!dark && g === worldG) vDraws.push({ i, x: Math.floor(x), yb: Math.floor(yb), lit, bob });
+}
+const VLIGHT = {
+  fire:   { h: 38, head: [64, 20, 2, 3], tail: [0, 17, 1, 4], bar: [[50, 6, RED_ON, 0], [57, 6, RED_ON, 1], [53, 6, '#ffffff', 2]] },
+  police: { h: 29, head: [55, 16, 1, 2], tail: [0, 16, 1, 2], bar: [[23, 4, RED_ON, 0], [32, 4, BLUE_ON, 1]] },
+  amb:    { h: 36, head: [60, 19, 1, 3], tail: [0, 15, 1, 5], bar: [[4, 4, RED_ON, 0], [38, 4, RED_ON, 1], [50, 11, '#ffffff', 1]] },
+};
+function drawVehicleLights(d, k) {
+  const spec = VLIGHT[V[d.i].kind], x = d.x, y = d.yb - spec.h + d.bob;
+  const [hx, hy, hw, hh] = spec.head, [tx, ty, tw, th] = spec.tail;
+  // headlight beam: a soft cone reaching forward
+  const by = y + hy + hh / 2;
+  for (let j = 0; j < 42; j++) {
+    const half = 1 + j * 0.24;
+    alpha(0.3 * k * (1 - j / 44), () => R(x + hx + hw + j, by - half, 1, half * 2, '#fff3b0'));
+  }
+  alpha(k, () => { R(x + hx, y + hy, hw, hh, '#fffbe6'); R(x + tx, y + ty, tw, th, '#ff4a3a'); });
+  alpha(0.55 * k, () => { circle(x + hx + 1, by, 3, '#fff3b0'); circle(x + tx, y + ty + th / 2, 3, '#ff3b3b'); });
+  if (d.lit) {
+    const ph = Math.floor(T * 7) % 2;
+    for (const [lx, ly, c, which] of spec.bar) {
+      if (which !== 2 && which !== ph) continue;
+      alpha(0.22 * k, () => circle(x + lx, y + ly, 8, c));
+      alpha(0.5 * k, () => circle(x + lx, y + ly, 3, c));
+    }
+  }
 }
 
 /* ---------- people & animals ---------- */
 const OUTFITS = {
   ff:    { shirt: '#d8b04f', shade: '#b8923a', pants: '#c9a24a', trim: '#e9f56b', shoes: INK, hat: 'helmet', hatC: '#e8222b' },
-  cop:   { shirt: '#2a6fe0', shade: '#1f58b8', pants: '#1a2a5a', badge: '#ffd21f', shoes: INK, hat: 'cap', hatC: '#1a2a5a' },
+  cop:   { shirt: '#2a6fe0', shade: '#1f58b8', pants: '#1a2a5a', badge: '#ffd21f', belt: '#1d1a2b', shoes: INK, hat: 'cap', hatC: '#1a2a5a' },
   medic: { shirt: '#f4f7fb', shade: '#cfd8e2', pants: '#1a3f9a', cross: '#e8222b', shoes: INK },
-  kid:   { shirt: '#ff6fb4', shade: '#e0559a', pants: '#2a6fe0', shoes: '#e8222b' },
-  kid2:  { shirt: '#3fb43a', shade: '#2f9a2c', pants: '#5a3a22', shoes: '#2f3240', hat: 'cap', hatC: '#f57a12' },
-  kid3:  { shirt: '#ffd21f', shade: '#e0b010', pants: '#8a4fd9', shoes: '#2f3240' },
+  kid:   { shirt: '#ff6fb4', shade: '#e0559a', pants: '#2a6fe0', shoes: '#e8222b', child: true },
+  kid2:  { shirt: '#3fb43a', shade: '#2f9a2c', pants: '#5a3a22', shoes: '#2f3240', hat: 'cap', hatC: '#f57a12', child: true },
+  kid3:  { shirt: '#ffd21f', shade: '#e0b010', pants: '#8a4fd9', shoes: '#2f3240', child: true },
   gran:  { shirt: '#8a4fd9', shade: '#6f3cba', pants: '#55289a', shoes: '#5a3a22', hair: '#dfe3ea' },
   dad:   { shirt: '#f57a12', shade: '#d0630a', pants: '#2f3240', shoes: INK },
+  mom:   { shirt: '#3fb4a8', shade: '#2f948a', pants: '#2f3240', shoes: '#a3121d', hair: '#a3471d' },
+  chef:  { shirt: '#ffffff', shade: '#d5dde6', pants: '#2f3240', shoes: INK, hat: 'chef' },
 };
-// A person 8 wide x 16 tall standing on (x, yb), x is the center.
-// p: { type, x, yb, dir (1 right / -1 left), pose: stand|sit|wave|slide|eat|carry|cheer, walk, skin, hair, seed, hop }
+// Height in pixels of a standing person of this type (adults 22, kids 19).
+const personH = type => (OUTFITS[type] && OUTFITS[type].child ? 19 : 22);
+// A person ~12 wide, standing with feet on yb; x is the center.
+// p: { type, x, yb, dir (1 right / -1 left), pose: stand|sit|wave|cheer|slide|eat|carry, walk, skin, hair, seed, hop, mini }
+// pose 'sit': yb is the seat surface; legs dangle about 8px below it.
 function drawPerson(p) {
+  if (p.mini) return drawPersonMini(p);
+  const o = OUTFITS[p.type] || OUTFITS.kid;
+  const pose = p.pose || 'stand', dir = p.dir || 1;
+  const torsoH = o.child ? 5 : 7, legH = o.child ? 3 : 4, tY = 9, lY = tY + torsoH;
+  const total = lY + legH + 2;
+  const bx = Math.floor(p.x) - 6;
+  const top = Math.floor(p.yb - (p.hop || 0)) - (pose === 'sit' ? lY : total);
+  const M = (dx, dy, w, h, c) => R(dir > 0 ? bx + dx : bx + 12 - dx - w, top + dy, w, h, c);
+  const skin = p.skin || SKIN[0], hair = o.hair || p.hair || '#5a3a22';
+  const step = p.walk ? Math.floor(T * 8 + (p.seed || 0)) % 2 : 0;
+  const ph = Math.floor(T * 5 + (p.seed || 0)) % 2;
+  // legs
+  if (pose === 'sit') {
+    M(4, lY, 7, 2, o.pants); M(9, lY + 2, 2, legH + 1, o.pants); M(9, lY + legH + 3, 3, 2, o.shoes);
+  } else if (pose === 'slide') {
+    M(4, lY, 4, legH, o.pants); M(4, lY + legH, 4, 2, o.shoes);
+  } else if (step) {
+    M(2, lY, 3, legH, o.pants); M(7, lY, 3, legH, o.pants); M(1, lY + legH, 4, 2, o.shoes); M(7, lY + legH, 4, 2, o.shoes);
+    if (o.trim) { M(2, lY + 1, 3, 1, o.trim); M(7, lY + 1, 3, 1, o.trim); }
+  } else {
+    M(3, lY, 3, legH, o.pants); M(6, lY, 3, legH, o.pants); M(2, lY + legH, 4, 2, o.shoes); M(6, lY + legH, 4, 2, o.shoes);
+    if (o.trim) M(3, lY + 1, 6, 1, o.trim);
+  }
+  // back arm (behind the body)
+  if (pose === 'cheer') { M(2, tY - 5 + (1 - ph), 2, 6, o.shade); M(2, tY - 7 + (1 - ph), 2, 2, skin); }
+  else if (pose === 'slide') { M(3, tY - 6, 2, 7, o.shade); M(3, tY - 8, 2, 2, skin); }
+  // body
+  M(2, tY, 8, torsoH, o.shirt); M(2, tY, 2, torsoH, o.shade); M(5, tY, 3, 1, o.shade);
+  if (o.trim) M(2, tY + torsoH - 2, 8, 1, o.trim);
+  if (o.belt) M(2, tY + torsoH - 1, 8, 1, o.belt);
+  if (o.badge) M(7, tY + 1, 2, 2, o.badge);
+  if (o.cross) { M(7, tY + 1, 1, 3, o.cross); M(6, tY + 2, 3, 1, o.cross); }
+  // head
+  M(4, 1, 5, 1, skin); M(3, 2, 7, 6, skin); M(4, 8, 5, 1, skin);
+  M(3, 4, 1, 2, '#d99a7a');
+  M(6, 4, 1, 2, INK); M(8, 4, 1, 2, INK);
+  M(9, 6, 1, 1, '#ff9c8a');
+  M(6, 7, 3, 1, '#a3121d');
+  if (o.hat === 'helmet') { M(2, 0, 8, 3, o.hatC); M(1, 3, 11, 1, o.hatC); M(8, 1, 2, 2, '#ffd21f'); M(4, 0, 2, 1, '#ff7a6b'); }
+  else if (o.hat === 'cap') { M(3, 0, 7, 3, o.hatC); M(9, 2, 3, 1, o.hatC); M(5, 1, 2, 1, '#ffd21f'); }
+  else if (o.hat === 'chef') { M(3, -3, 7, 4, '#ffffff'); M(3, 1, 7, 1, '#d5dde6'); }
+  else { M(3, 0, 7, 2, hair); M(2, 1, 2, 5, hair); M(3, 2, 1, 2, hair); M(8, 1, 2, 1, hair); }
+  // front arm
+  if (pose === 'wave' || pose === 'cheer') { M(8, tY - 5 + ph, 2, 6, o.shirt); M(8, tY - 7 + ph, 2, 2, skin); }
+  else if (pose === 'slide') { M(8, tY - 6, 2, 7, o.shirt); M(8, tY - 8, 2, 2, skin); }
+  else if (pose === 'carry') { M(7, tY + 2, 4, 2, o.shirt); M(11, tY + 2, 1, 2, skin); }
+  else if (pose === 'eat') {
+    if (ph) { M(7, tY, 2, 3, o.shirt); M(8, 7, 2, 2, skin); } else { M(7, tY + 2, 4, 2, o.shirt); M(11, tY + 2, 1, 2, skin); }
+  } else { M(6, tY + 1, 2, torsoH - 1, o.shade); M(6, tY + torsoH, 2, 2, skin); }
+}
+// Small distant person: 8 wide x 16 tall standing on (x, yb), x is the center.
+// p: { type, x, yb, dir (1 right / -1 left), pose: stand|sit|wave|slide|eat|carry|cheer, walk, skin, hair, seed, hop }
+function drawPersonMini(p) {
   const o = OUTFITS[p.type] || OUTFITS.kid;
   const pose = p.pose || 'stand', dir = p.dir || 1;
   const bx = Math.floor(p.x) - 4;
@@ -633,6 +720,7 @@ function goScene(name, arg) {
   wipe = { t: 0, switched: false, fn: () => {
     if (SCENES[scene].leave) SCENES[scene].leave();
     parts = []; scene = name;
+    resize();   // each scene can use its own zoom
     if (SCENES[name].enter) SCENES[name].enter(arg);
   } };
 }
@@ -670,7 +758,8 @@ function resize() {
   const cs = getComputedStyle(probe);
   const inset = k => (parseFloat(cs['padding' + k]) || 0) * dpr;
   const it = inset('Top'), ir = inset('Right'), ib = inset('Bottom'), il = inset('Left');
-  S = Math.max(1, Math.floor(Math.min((dw - il - ir) / 300, (dh - it - ib) / 250)));
+  const [vw, vh] = (SCENES[scene] && SCENES[scene].view) || [300, 250];   // smallest view the scene needs
+  S = Math.max(1, Math.floor(Math.min((dw - il - ir) / vw, (dh - it - ib) / vh)));
   W = Math.ceil(dw / S); H = Math.ceil(dh / S);
   L.safeT = Math.ceil(it / S); L.safeR = Math.ceil(ir / S); L.safeB = Math.ceil(ib / S); L.safeL = Math.ceil(il / S);
   lo.width = worldCv.width = W; lo.height = worldCv.height = H;
@@ -715,16 +804,18 @@ function draw() {
   g = loG;
   drawSky(sc.groundY ? sc.groundY() : L.hillY);
   g = worldG;
+  vDraws = [];
   worldG.clearRect(0, 0, W, H);
   sc.drawWorld();
   const k = nightK();
   if (k > 0.01) {   // darken only the pixels the world drew, leaving the night sky alone
     worldG.globalCompositeOperation = 'source-atop';
-    worldG.globalAlpha = 0.55 * k; worldG.fillStyle = '#0b1030'; worldG.fillRect(0, 0, W, H);
+    worldG.globalAlpha = 0.42 * k; worldG.fillStyle = '#141c48'; worldG.fillRect(0, 0, W, H);
     worldG.globalAlpha = 1; worldG.globalCompositeOperation = 'source-over';
   }
   g = loG;
   loG.drawImage(worldCv, 0, 0);
+  if (k > 0.02) for (const d of vDraws) drawVehicleLights(d, k);
   if (sc.drawLit) sc.drawLit();
   if (sc.drawUI) sc.drawUI();
   drawWipe();
