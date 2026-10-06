@@ -8,6 +8,7 @@ async function keepAwake() {
 document.getElementById('play').addEventListener('click', () => {
   initAudio();
   started = true;
+  watchInsets();
   document.getElementById('start').hidden = true;
   say('lets-go');
   keepAwake();
@@ -23,8 +24,11 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   navigator.serviceWorker.register('sw.js').catch(() => {});   // offline play; not available in every viewer
 }
 
+fitStage();
 new ResizeObserver(resize).observe(stage);
 resize();
+setInterval(watchInsets, 500);
+['orientationchange', 'resize', 'pageshow'].forEach(t => window.addEventListener(t, () => { fitStage(); setTimeout(watchInsets, 60); }));
 let last = performance.now();
 function frame(now) {
   update(Math.min(0.05, (now - last) / 1000));

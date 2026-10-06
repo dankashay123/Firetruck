@@ -752,12 +752,30 @@ const probe = document.createElement('div');
 probe.style.cssText = 'position:fixed;left:0;top:0;visibility:hidden;pointer-events:none;' +
   'padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
 document.body.appendChild(probe);
+// iOS home-screen apps can report a viewport that is short by the status bar height,
+// leaving a blank strip at the bottom; there, size the stage to the physical screen.
+function fitStage() {
+  if (!navigator.standalone || !window.screen) return;
+  const portrait = innerHeight >= innerWidth;
+  const sw = Math.min(screen.width, screen.height), sh = Math.max(screen.width, screen.height);
+  Object.assign(stage.style, { right: 'auto', bottom: 'auto', width: (portrait ? sw : sh) + 'px', height: (portrait ? sh : sw) + 'px' });
+}
+let insetKey = '';
+function readInsets() {
+  const cs = getComputedStyle(probe);
+  return ['Top', 'Right', 'Bottom', 'Left'].map(k => parseFloat(cs['padding' + k]) || 0);
+}
+// Safari fills in the safe-area insets a moment after launch (and on rotation) without
+// resizing anything, so keep checking and re-layout when they change.
+function watchInsets() {
+  const key = readInsets().join(',');
+  if (key !== insetKey) { insetKey = key; fitStage(); resize(); }
+}
 function resize() {
+  insetKey = readInsets().join(',');
   dpr = window.devicePixelRatio || 1;
   const dw = Math.round(stage.clientWidth * dpr), dh = Math.round(stage.clientHeight * dpr);
-  const cs = getComputedStyle(probe);
-  const inset = k => (parseFloat(cs['padding' + k]) || 0) * dpr;
-  const it = inset('Top'), ir = inset('Right'), ib = inset('Bottom'), il = inset('Left');
+  const [it, ir, ib, il] = readInsets().map(v => v * dpr);
   const [vw, vh] = (SCENES[scene] && SCENES[scene].view) || [300, 250];   // smallest view the scene needs
   S = Math.max(1, Math.floor(Math.min((dw - il - ir) / vw, (dh - it - ib) / vh)));
   W = Math.ceil(dw / S); H = Math.ceil(dh / S);
