@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fire Station">
+<meta name="theme-color" content="#8fd6ff">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Fire Station</title>
+<style>
+/* One full-screen pixel world: sky on top, station in the middle, paint pots at the thumb's reach. */
+:root {
+  --sky: #8fd6ff;
+  --grass: #5aa84c;
+  --ink: #1d1a2b;
+  --fire: #e8222b;
+  --fire-dark: #9c1420;
+  --cream: #fff6e0;
+  color-scheme: light;
+}
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: linear-gradient(var(--sky) 55%, var(--grass) 55%);
+}
+body {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+}
+#stage {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px);
+  bottom: env(safe-area-inset-bottom, 0px);
+  left: env(safe-area-inset-left, 0px);
+  right: env(safe-area-inset-right, 0px);
+  overflow: hidden;
+  background: var(--sky);
+}
+#screen {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  touch-action: none;
+}
+#start {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(29, 26, 43, 0.35);
+}
+#start[hidden] { display: none; }
+#play {
+  width: min(42vmin, 220px);
+  aspect-ratio: 1;
+  max-width: 100%;
+  border-radius: 50%;
+  border: 0;
+  background: var(--fire);
+  box-shadow: 0 10px 0 var(--fire-dark), 0 0 0 8px var(--cream);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+#play:active { transform: translateY(6px); box-shadow: 0 4px 0 var(--fire-dark), 0 0 0 8px var(--cream); }
+#play:focus-visible { outline: 4px solid var(--ink); outline-offset: 12px; }
+#play svg { width: 45%; height: 45%; margin-left: 9%; }
+@keyframes pulse { 50% { scale: 1.06; } }
+@media (prefers-reduced-motion: reduce) { #play { animation: none; } }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="screen"></canvas>
+  <div id="start">
+    <button id="play" aria-label="Play">
+      <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 0 L10 5 L1 10 Z" fill="#fff6e0"/></svg>
+    </button>
+  </div>
+</div>
+<script>
+(() => {
+'use strict';
+
+/* ---------- setup ---------- */
+const stage = document.getElementById('stage');
+const cv = document.getElementById('screen');
+const ctx = cv.getContext('2d');
+const lo = document.createElement('canvas');   // low-res pixel buffer
+let g = lo.getContext('2d');           // current draw target
+let W = 320, H = 200, S = 1, dpr = 1;
+let T = 0;                                       // seconds since load
+let started = false;
+
+/* ---------- colors ---------- */
+// [light, mid, dark] ramps for each paint pot
+const PALETTE = [
+  ['red',    'Red',    ['#ff7a6b', '#e8222b', '#a3121d']],
+  ['orange', 'Orange', ['#ffb15a', '#f57a12', '#b14c06']],
+  ['yellow', 'Yellow', ['#fff27a', '#ffd21f', '#c99410']],
+  ['green',  'Green',  ['#8fe36b', '#3fb43a', '#1f7a2a']],
+  ['blue',   'Blue',   ['#6fb6ff', '#2a6fe0', '#1a3f9a']],
+  ['purple', 'Purple', ['#c39bff', '#8a4fd9', '#55289a']],
+  ['pink',   'Pink',   ['#ffb3da', '#ff6fb4', '#c73d84']],
+  ['white',  'White',  ['#ffffff', '#e9eef2', '#b4bec8']],
+  ['black',  'Black',  ['#5a5f6e', '#2f3240', '#16171f']],
+];
+const COLOR = Object.fromEntries(PALETTE.map(([k, n, c]) => [k, { name: n, c }]));
+const WARM = new Set(['red', 'orange', 'pink']);
+const GLASS = '#bfe6ff', GLASS2 = '#9fd2ef', CHROME = '#cfd6dd', TIRE = '#24262d', WELL = '#1b1c22';
+const RED_ON = '#ff3b3b', RED_OFF = '#8c2a2a', BLUE_ON = '#3b8bff', BLUE_OFF = '#26407a';
+
+/* ---------- vehicles ---------- */
+const V = [
+  { kind: 'police', name: 'Police car', len: 56, h: 29, color: 'blue' },
+  { kind: 'fire',   name: 'Fire truck', len: 66, h: 38, color: 'red' },
+  { kind: 'amb',    name: 'Ambulance',  len: 62, h: 36, color: 'white' },
+];
+try {
+  const saved = JSON.parse(localStorage.getItem('firestation.colors') || 'null');
+  if (Array.isArray(saved)) saved.forEach((k, i) => { if (V[i] && COLOR[k]) V[i].color = k; });
+} catch (e) { /* storage unavailable */ }
+function saveColors() {
+  try { localStorage.setItem('firestation.colors', JSON.stringify(V.map(v => v.color))); } catch (e) {}
+}
+for (const v of V) Object.assign(v, { x: 0, y: 0, homeX: 0, state: 'parked', t: 0, speed: 0, lap: false, rot: 0, hop: 0, puff: 0, stopSiren: null });
+let selected = 1;  // the fire truck is the star
+
+/* ---------- world props ---------- */
+const L = {};
+const dog = { jump: 0 };
+const bell = { swing: 0 };
+const sun = { spin: 0 };
+const hydrant = { spray: 0 };
+const heli = { x: -60, y: 20, hop: 0, boost: 0 };
+let clouds = [];
+let parts = [];
+
+/* ---------- pixel helpers ---------- */
+function R(x, y, w, h, c) { g.fillStyle = c; g.fillRect(Math.floor(x), Math.floor(y), w, h); }
+function circle(cx, cy, r, c) {
+  cx = Math.floor(cx); cy = Math.floor(cy);
+  g.fillStyle = c;
+  for (let dy = -r; dy <= r; dy++) {
+    const dx = Math.floor(Math.sqrt((r + 0.5) ** 2 - dy * dy));
+    g.fillRect(cx - dx, cy + dy, dx * 2 + 1, 1);
+  }
+}
+function glow(cx, cy, c) { g.globalAlpha = 0.35; circle(cx, cy, 5, c); g.globalAlpha = 1; }
+function wheel(cx, cy, r, rot) {
+  circle(cx, cy, r, TIRE);
+  circle(cx, cy, r - 2, '#a7b0ba');
+  if (r >= 6) circle(cx, cy, r - 4, '#e3e7eb');
+  const sx = Math.round(Math.cos(rot) * (r - 3)), sy = Math.round(Math.sin(rot) * (r - 3));
+  R(cx + sx, cy + sy, 1, 1, '#4d5560');
+  R(cx - sx, cy - sy, 1, 1, '#4d5560');
+}
+
+// 3x5 bitmap font, just the letters the sign needs
+const FONT = {
+  A: '010101111101101', E: '111100110100111', F: '111100110100100', I: '111010010010111',
+  N: '110101101101101', O: '010101101101010', R: '110101110101101', S: '011100010001110',
+  T: '111010010010010', ' ': '000000000000000',
+};
+function text(str, x, y, s, c) {
+  [...str].forEach((ch, i) => {
+    const bits = FONT[ch] || FONT[' '];
+    for (let b = 0; b < 15; b++) if (bits[b] === '1') R(x + i * 4 * s + (b % 3) * s, y + Math.floor(b / 3) * s, s, s, c);
+  });
+}
+
+/* ---------- vehicle sprites (side view, facing right) ---------- */
+function drawFire(x, yb, key, lit, ph, bob, rot) {
+  const c = COLOR[key].c, y = yb - 38 + bob;
+  const P = (dx, dy, w, h, col) => R(x + dx, y + dy, w, h, col);
+  const stripe = key === 'white' ? '#e8222b' : '#f4f7fb';
+  P(2, 29, 62, 3, '#2b2e36');                                   // chassis
+  P(0, 12, 46, 18, c[1]); P(0, 12, 46, 1, c[0]); P(0, 28, 46, 2, c[2]);
+  for (let i = 0; i < 3; i++) {                                  // equipment lockers
+    const dx = 3 + i * 14;
+    P(dx, 15, 12, 10, c[2]); P(dx + 1, 16, 10, 8, c[1]);
+    P(dx + 1, 18, 10, 1, c[0]); P(dx + 1, 21, 10, 1, c[0]);
+    P(dx + 8, 23, 2, 1, '#e9eef2');
+  }
+  P(0, 26, 64, 1, stripe);
+  P(46, 8, 17, 22, c[1]); P(63, 11, 2, 19, c[1]);               // cab
+  P(46, 8, 17, 1, c[0]); P(46, 28, 19, 2, c[2]);
+  P(49, 10, 13, 1, c[2]); P(50, 11, 12, 7, GLASS); P(51, 12, 2, 2, '#ffffff'); P(62, 12, 1, 6, GLASS2);
+  P(48, 19, 1, 9, c[2]); P(50, 21, 3, 1, '#e9eef2');
+  P(3, 5, 40, 1, '#d5dce3'); P(3, 9, 40, 1, '#8b96a1');         // ladder
+  for (let i = 0; i < 10; i++) P(4 + i * 4, 6, 1, 3, '#d5dce3');
+  P(7, 10, 3, 2, '#6b7480'); P(36, 10, 3, 2, '#6b7480');
+  P(61, 27, 5, 3, CHROME); P(64, 20, 1, 3, '#fff6b0');           // bumper, headlight
+  P(47, 7, 14, 1, '#444a55');                                    // light bar
+  P(48, 5, 5, 2, lit && ph === 0 ? RED_ON : RED_OFF);
+  P(53, 5, 2, 2, lit ? '#ffffff' : '#bbbbbb');
+  P(55, 5, 5, 2, lit && ph === 1 ? RED_ON : RED_OFF);
+  if (lit) glow(x + (ph ? 57 : 50), y + 6, RED_ON);
+  for (const wx of [12, 26, 53]) circle(x + wx, yb - 6 + bob, 7, WELL);
+  for (const wx of [12, 26, 53]) wheel(x + wx, yb - 6, 6, rot);
+}
+
+function drawPolice(x, yb, key, lit, ph, bob, rot) {
+  const c = COLOR[key].c, y = yb - 29 + bob;
+  const P = (dx, dy, w, h, col) => R(x + dx, y + dy, w, h, col);
+  const panel = key === 'white' ? '#2f3240' : '#f4f7fb';
+  P(17, 6, 20, 1, c[0]); P(15, 7, 25, 7, c[1]); P(14, 9, 1, 5, c[1]); P(40, 9, 2, 5, c[1]);   // cabin
+  P(16, 9, 1, 4, GLASS); P(17, 8, 9, 5, GLASS); P(28, 8, 10, 5, GLASS); P(38, 9, 1, 4, GLASS2);
+  P(18, 9, 2, 1, '#ffffff'); P(26, 8, 2, 6, c[2]);
+  P(1, 14, 54, 9, c[1]); P(0, 15, 56, 7, c[1]); P(1, 14, 54, 1, c[0]); P(0, 21, 56, 2, c[2]);  // body
+  P(15, 15, 25, 6, panel); P(27, 15, 1, 6, c[2]);
+  P(32, 17, 3, 1, '#ffd21f'); P(33, 16, 1, 3, '#ffd21f');      // badge
+  P(55, 16, 1, 2, '#fff6b0'); P(0, 16, 1, 2, RED_ON);
+  P(52, 21, 4, 2, CHROME); P(0, 21, 4, 2, CHROME);
+  P(20, 3, 7, 2, lit && ph === 0 ? RED_ON : RED_OFF);             // light bar
+  P(27, 3, 2, 2, '#dddddd');
+  P(29, 3, 7, 2, lit && ph === 1 ? BLUE_ON : BLUE_OFF);
+  P(19, 5, 18, 1, '#444a55');
+  if (lit) glow(x + (ph ? 32 : 23), y + 4, ph ? BLUE_ON : RED_ON);
+  for (const wx of [12, 44]) circle(x + wx, yb - 5 + bob, 6, WELL);
+  for (const wx of [12, 44]) wheel(x + wx, yb - 5, 5, rot);
+}
+
+function drawAmb(x, yb, key, lit, ph, bob, rot) {
+  const c = COLOR[key].c, y = yb - 36 + bob;
+  const P = (dx, dy, w, h, col) => R(x + dx, y + dy, w, h, col);
+  const warm = WARM.has(key);
+  const stripe = warm ? '#f4f7fb' : '#e8222b', cross = warm ? '#ffffff' : '#e8222b';
+  P(0, 6, 42, 24, c[1]); P(0, 6, 42, 1, c[0]); P(0, 28, 42, 2, c[2]);   // patient box
+  P(42, 12, 16, 18, c[1]); P(58, 15, 3, 15, c[1]); P(42, 12, 16, 1, c[0]); P(42, 28, 19, 2, c[2]);  // cab
+  P(45, 14, 11, 7, GLASS); P(46, 15, 2, 2, '#ffffff'); P(56, 15, 2, 6, GLASS2);
+  P(44, 22, 1, 6, c[2]); P(47, 24, 3, 1, '#9aa3ad');
+  P(3, 9, 1, 12, c[2]); P(5, 9, 5, 4, GLASS);
+  P(0, 22, 61, 2, stripe);
+  P(19, 9, 5, 12, cross); P(15, 13, 13, 4, cross);
+  P(57, 27, 5, 3, CHROME); P(60, 19, 1, 3, '#fff6b0');
+  P(1, 3, 6, 3, lit && ph === 0 ? RED_ON : RED_OFF);
+  P(35, 3, 6, 3, lit && ph === 1 ? RED_ON : RED_OFF);
+  P(46, 10, 8, 2, lit ? (ph ? '#ffffff' : RED_ON) : RED_OFF);
+  if (lit) glow(x + (ph ? 38 : 4), y + 4, RED_ON);
+  for (const wx of [12, 50]) circle(x + wx, yb - 6 + bob, 7, WELL);
+  for (const wx of [12, 50]) wheel(x + wx, yb - 6, 6, rot);
+}
+const SPRITE = { fire: drawFire, police: drawPolice, amb: drawAmb };
+
+/* ---------- sound (all synthesized) ---------- */
+let ac = null, master = null, noiseBuf = null;
+function initAudio() {
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}  // play even with the silent switch on
+  if (!ac) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ac = new AC();
+    master = ac.createGain();
+    master.gain.value = 0.32;               // gentle on little ears
+    const comp = ac.createDynamicsCompressor();
+    master.connect(comp); comp.connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  if (ac.state === 'suspended') ac.resume();
+}
+function tone(type, freq, start, dur, vol, freqEnd) {
+  if (!ac) return;
+  const t = ac.currentTime + start;
+  const o = ac.createOscillator(), gn = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (freqEnd) o.frequency.exponentialRampToValueAtTime(freqEnd, t + dur);
+  gn.gain.setValueAtTime(0.0001, t);
+  gn.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+  gn.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(gn); gn.connect(master);
+  o.start(t); o.stop(t + dur + 0.05);
+}
+function noise(start, dur, vol, freq, q) {
+  if (!ac) return;
+  const t = ac.currentTime + start;
+  const s = ac.createBufferSource(), f = ac.createBiquadFilter(), gn = ac.createGain();
+  s.buffer = noiseBuf; s.loop = true;
+  f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q || 1;
+  gn.gain.setValueAtTime(vol, t);
+  gn.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(f); f.connect(gn); gn.connect(master);
+  s.start(t); s.stop(t + dur + 0.05);
+}
+function siren(kind) {
+  if (!ac) return () => {};
+  const t = ac.currentTime, MAX = 30;
+  const o = ac.createOscillator(), f = ac.createBiquadFilter(), gn = ac.createGain();
+  const extra = [];
+  f.type = 'lowpass'; f.frequency.value = 2400;
+  gn.gain.setValueAtTime(0.0001, t);
+  gn.gain.exponentialRampToValueAtTime(0.16, t + 0.15);
+  if (kind === 'fire') {               // horn blast, then a slow wail
+    tone('square', 233, 0, 0.55, 0.12); tone('square', 277, 0, 0.55, 0.12);
+    o.type = 'triangle';
+    for (let k = 0; k < MAX / 2.4; k++) {
+      o.frequency.setValueAtTime(520, t + k * 2.4);
+      o.frequency.linearRampToValueAtTime(1150, t + k * 2.4 + 1.2);
+      o.frequency.linearRampToValueAtTime(520, t + k * 2.4 + 2.4);
+    }
+  } else if (kind === 'police') {      // fast yelp
+    o.type = 'triangle'; o.frequency.value = 1050;
+    const lfo = ac.createOscillator(), depth = ac.createGain();
+    lfo.type = 'triangle'; lfo.frequency.value = 4.5; depth.gain.value = 380;
+    lfo.connect(depth); depth.connect(o.frequency);
+    lfo.start(t); lfo.stop(t + MAX); extra.push(lfo);
+  } else {                              // hi-lo
+    o.type = 'triangle';
+    for (let k = 0; k < MAX / 0.55; k++) o.frequency.setValueAtTime(k % 2 ? 770 : 960, t + k * 0.55);
+  }
+  o.connect(f); f.connect(gn); gn.connect(master);
+  o.start(t); o.stop(t + MAX);
+  let stopped = false;
+  return () => {
+    if (stopped) return; stopped = true;
+    const n = ac.currentTime;
+    gn.gain.cancelScheduledValues(n);
+    gn.gain.setValueAtTime(gn.gain.value, n);
+    gn.gain.exponentialRampToValueAtTime(0.0001, n + 0.4);
+    o.stop(n + 0.45); extra.forEach(x => { try { x.stop(n + 0.45); } catch (e) {} });
+  };
+}
+const SFX = {
+  honk() { tone('square', 349, 0, 0.22, 0.12); tone('square', 440, 0, 0.22, 0.1); tone('square', 349, 0.28, 0.22, 0.12); tone('square', 440, 0.28, 0.22, 0.1); },
+  paint() { noise(0, 0.18, 0.25, 900, 0.8); [523, 659, 784, 1047].forEach((f, i) => tone('sine', f, 0.05 + i * 0.07, 0.25, 0.18)); },
+  bell() { [0, 0.45, 0.9].forEach(s => { tone('sine', 1320, s, 1.2, 0.2); tone('sine', 2640, s, 0.6, 0.06); tone('sine', 3960, s, 0.3, 0.03); }); },
+  woof() { [0, 0.25].forEach(s => { tone('sawtooth', 320, s, 0.14, 0.18, 110); noise(s, 0.1, 0.12, 500, 1.5); }); },
+  boing() { tone('sine', 200, 0, 0.18, 0.2, 700); tone('sine', 700, 0.18, 0.3, 0.15, 300); },
+  water() { noise(0, 1.6, 0.18, 1800, 0.6); },
+  chop() { for (let i = 0; i < 16; i++) noise(i * 0.08, 0.06, 0.3, 260, 1.2); },
+};
+
+/* ---------- voice ---------- */
+function say(words) {
+  try {
+    if (!window.speechSynthesis) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(words);
+    u.rate = 0.9; u.pitch = 1.15; u.volume = 1;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+
+/* ---------- layout ---------- */
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  const dw = Math.round(stage.clientWidth * dpr), dh = Math.round(stage.clientHeight * dpr);
+  S = Math.max(1, Math.floor(Math.min(dw / 300, dh / 196)));
+  W = Math.ceil(dw / S); H = Math.ceil(dh / S);
+  lo.width = W; lo.height = H;
+  cv.width = W * S; cv.height = H * S;
+  cv.style.width = (W * S / dpr) + 'px'; cv.style.height = (H * S / dpr) + 'px';
+  layout();
+}
+function layout() {
+  L.blob = Math.max(22, Math.min(36, Math.floor((W - 24) / 9) - 4));
+  L.gap = Math.max(3, Math.min(8, Math.floor((W - 9 * L.blob) / 12)));
+  L.palH = L.blob + 14; L.palY = H - L.palH;
+  L.roadH = 46; L.roadY = L.palY - L.roadH;
+  L.floorY = L.roadY;
+  L.laneY = L.roadY + L.roadH - 6;
+  L.bayW = 76; L.bayGap = 6; L.bayH = 50;
+  L.bldW = 3 * L.bayW + 2 * L.bayGap + 16;
+  L.bldX = Math.floor((W - L.bldW) / 2);
+  L.bayTop = L.floorY - L.bayH;
+  L.bldTop = L.bayTop - 22;
+  L.hillY = L.floorY - 30;
+  L.bays = [0, 1, 2].map(i => L.bldX + 8 + i * (L.bayW + L.bayGap));
+  L.dogX = Math.max(2, L.bldX - 19);
+  L.hydX = L.bldX + L.bldW + Math.min(10, Math.floor((W - L.bldX - L.bldW - 9) / 2));
+  L.towerX = L.bldX + L.bldW / 2;
+  const total = 9 * L.blob + 8 * L.gap;
+  L.pots = PALETTE.map((p, i) => ({ key: p[0], cx: Math.floor((W - total) / 2) + i * (L.blob + L.gap) + L.blob / 2, cy: L.palY + Math.floor(L.palH / 2) }));
+  V.forEach((v, i) => {
+    v.homeX = L.bays[i] + Math.floor((L.bayW - v.len) / 2);
+    if (v.stopSiren) v.stopSiren();
+    Object.assign(v, { x: v.homeX, y: L.floorY - 1, state: 'parked', stopSiren: null });
+  });
+  const skyH = Math.max(40, L.bldTop - 40);
+  heli.y = Math.max(6, Math.floor(L.bldTop * 0.42) - 6);
+  const n = Math.max(3, Math.round(skyH / 60) + 2);
+  clouds = Array.from({ length: n }, (_, i) => ({
+    x: Math.random() * W, y: 8 + (i / n) * skyH + Math.random() * 12, s: 0.7 + Math.random() * 0.6,
+  }));
+}
+
+/* ---------- particles ---------- */
+function spawn(n, fn) { for (let i = 0; i < n; i++) parts.push(fn(i)); }
+function paintSplash(v, key) {
+  const cx = v.x + v.len / 2, cy = v.y - v.h / 2, c = COLOR[key].c;
+  spawn(36, () => ({ x: cx, y: cy, vx: (Math.random() - 0.5) * 140, vy: -40 - Math.random() * 90, g: 220, life: 0.9, max: 0.9, s: 2 + (Math.random() * 2 | 0), c: c[Math.random() * 3 | 0] }));
+  spawn(10, () => ({ x: cx + (Math.random() - 0.5) * v.len, y: cy + (Math.random() - 0.5) * v.h, vx: 0, vy: -15, g: 0, life: 0.6, max: 0.6, s: 1, c: '#ffffff', star: true }));
+}
+
+/* ---------- interaction ---------- */
+function startTrip(v) {
+  v.state = 'exit'; v.t = 0; v.speed = 0; v.lap = false;
+  v.stopSiren = siren(v.kind);
+}
+function vehicleHit(v, i, x, y) {
+  if (v.state === 'parked') return x >= L.bays[i] - 3 && x < L.bays[i] + L.bayW + 3 && y >= L.bayTop - 4 && y < L.floorY + 4;
+  return x >= v.x - 6 && x < v.x + v.len + 6 && y >= v.y - v.h - 6 && y < v.y + 6;
+}
+function onTap(x, y) {
+  // paint pots
+  const r = L.blob / 2 + 4;
+  for (const p of L.pots) {
+    if ((x - p.cx) ** 2 + (y - p.cy) ** 2 <= r * r) {
+      const v = V[selected];
+      v.color = p.key; v.hop = 0.35;
+      paintSplash(v, p.key); SFX.paint(); say(COLOR[p.key].name + '!'); saveColors();
+      return;
+    }
+  }
+  // vehicles: the moving ones are drawn on top, so check them first
+  const order = [0, 1, 2].sort((a, b) => (V[a].state === 'parked') - (V[b].state === 'parked'));
+  for (const i of order) {
+    const v = V[i];
+    if (vehicleHit(v, i, x, y)) {
+      selected = i;
+      if (v.state === 'parked') { say(v.name + '!'); startTrip(v); }
+      else { SFX.honk(); v.hop = 0.3; }
+      return;
+    }
+  }
+  const bx = L.towerX, by = L.bldTop - 14;
+  if (Math.abs(x - bx) < 14 && y > by - 14 && y < by + 12) { bell.swing = 1.4; SFX.bell(); return; }
+  if (x >= L.dogX - 4 && x < L.dogX + 20 && y > L.floorY - 22 && y < L.floorY + 4) { dog.jump = 0.6; SFX.woof(); return; }
+  if (x >= L.hydX - 5 && x < L.hydX + 14 && y > L.floorY - 20 && y < L.floorY + 4) { hydrant.spray = 1.6; SFX.water(); return; }
+  if (x >= heli.x - 4 && x < heli.x + 44 && y >= heli.y - 6 && y < heli.y + 24) { heli.hop = 1; heli.boost = 1.2; SFX.chop(); say('Helicopter!'); return; }
+  if ((x - (W - 30)) ** 2 + (y - 30) ** 2 < 22 * 22) { sun.spin = 1; SFX.boing(); return; }
+}
+cv.addEventListener('pointerdown', e => {
+  if (!started) return;
+  e.preventDefault();
+  initAudio();
+  const rect = cv.getBoundingClientRect();
+  onTap((e.clientX - rect.left) * dpr / S, (e.clientY - rect.top) * dpr / S);
+});
+['gesturestart', 'dblclick', 'contextmenu'].forEach(t => document.addEventListener(t, e => e.preventDefault()));
+document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+let wakeLock = null;
+async function keepAwake() {
+  try { if (navigator.wakeLock && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } } catch (e) {}
+}
+document.getElementById('play').addEventListener('click', () => {
+  initAudio();
+  started = true;
+  document.getElementById('start').hidden = true;
+  say("Let's go!");
+  keepAwake();
+});
+document.addEventListener('visibilitychange', () => {
+  if (!ac) return;
+  if (document.hidden) ac.suspend(); else { ac.resume(); if (started) keepAwake(); }
+});
+
+/* ---------- update ---------- */
+const ease = k => k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+function update(dt) {
+  T += dt;
+  for (const v of V) {
+    const x0 = v.x;
+    v.hop = Math.max(0, v.hop - dt);
+    if (v.state === 'exit') {
+      v.t += dt; const k = Math.min(1, v.t / 0.6);
+      v.y = (L.floorY - 1) + (L.laneY - L.floorY + 1) * ease(k);
+      if (k >= 1) v.state = 'drive';
+    } else if (v.state === 'drive') {
+      v.speed = Math.min(150, v.speed + 260 * dt);
+      v.x += v.speed * dt;
+      if (!v.lap && v.x > W + 8) { v.x = -v.len - 8; v.lap = true; }
+      if (v.lap && v.x >= v.homeX - 45) v.state = 'arrive';
+    } else if (v.state === 'arrive') {
+      v.x = Math.min(v.homeX, v.x + Math.max(18, (v.homeX - v.x) * 3) * dt);
+      if (v.x >= v.homeX) { v.state = 'enter'; v.t = 0; }
+    } else if (v.state === 'enter') {
+      v.t += dt; const k = Math.min(1, v.t / 0.6);
+      v.y = L.laneY + (L.floorY - 1 - L.laneY) * ease(k);
+      if (k >= 1) { v.state = 'parked'; if (v.stopSiren) v.stopSiren(); v.stopSiren = null; }
+    }
+    v.rot += (v.x - x0) / 5;
+    if (v.state === 'drive' || v.state === 'arrive') {
+      v.puff -= dt;
+      if (v.puff <= 0) { v.puff = 0.09; parts.push({ x: v.x - 1, y: v.y - 7, vx: -12, vy: -14, g: 0, life: 0.6, max: 0.6, s: 2, c: '#c9ccd3' }); }
+    }
+  }
+  dog.jump = Math.max(0, dog.jump - dt);
+  bell.swing = Math.max(0, bell.swing - dt);
+  sun.spin = Math.max(0, sun.spin - dt);
+  if (hydrant.spray > 0) {
+    hydrant.spray -= dt;
+    const nx = L.hydX + 4, ny = L.floorY - 8;
+    spawn(3, i => ({ x: nx + (i % 2 ? 6 : -2), y: ny, vx: (i % 2 ? 1 : -1) * (25 + Math.random() * 30), vy: -60 - Math.random() * 40, g: 240, life: 0.7, max: 0.7, s: 1 + (Math.random() * 2 | 0), c: Math.random() < 0.5 ? '#6fc8ff' : '#d8f2ff' }));
+  }
+  heli.hop = Math.max(0, heli.hop - dt); heli.boost = Math.max(0, heli.boost - dt);
+  heli.x += (22 + heli.boost * 60) * dt;
+  if (heli.x > W + 80) heli.x = -140;   // short pause off-screen before the next pass
+  for (const c of clouds) { c.x += 4 * c.s * dt; if (c.x > W + 30) c.x = -30; }
+  for (const p of parts) { p.life -= dt; p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
+  parts = parts.filter(p => p.life > 0);
+}
+
+/* ---------- draw ---------- */
+function drawSky() {
+  const bands = ['#7ccdff', '#8fd6ff', '#a4deff', '#b9e7ff', '#cdeffd'];
+  const bh = Math.ceil(L.hillY / bands.length);
+  bands.forEach((c, i) => R(0, i * bh, W, bh + 1, c));
+  // sun
+  const sx = W - 30, sy = 30, spin = sun.spin > 0 ? (1 - sun.spin) * Math.PI * 2 : 0;
+  const grow = sun.spin > 0 ? Math.round(Math.sin(sun.spin * Math.PI) * 3) : 0;
+  for (let k = 0; k < 8; k++) {
+    const a = k * Math.PI / 4 + spin + T * 0.3;
+    for (let d = 15 + grow; d < 19 + grow; d++) R(sx + Math.cos(a) * d, sy + Math.sin(a) * d, 2, 2, '#ffd21f');
+  }
+  circle(sx, sy, 12 + grow, '#ffd21f'); circle(sx - 2, sy - 2, 8 + grow, '#ffe873');
+  R(sx - 5, sy - 3, 2, 3, '#7a4a10'); R(sx + 3, sy - 3, 2, 3, '#7a4a10');
+  R(sx - 5, sy + 4, 2, 1, '#7a4a10'); R(sx - 3, sy + 5, 6, 1, '#7a4a10'); R(sx + 3, sy + 4, 2, 1, '#7a4a10');
+  R(sx - 8, sy + 2, 2, 2, '#ff9c6b'); R(sx + 6, sy + 2, 2, 2, '#ff9c6b');
+  for (const c of clouds) {
+    const r = Math.round(7 * c.s);
+    circle(c.x, c.y + 2, r, '#dcebf5'); circle(c.x + r, c.y - 2, r + 2, '#dcebf5'); circle(c.x + 2 * r + 2, c.y + 2, r, '#dcebf5');
+    circle(c.x, c.y, r, '#ffffff'); circle(c.x + r, c.y - 4, r + 2, '#ffffff'); circle(c.x + 2 * r + 2, c.y, r, '#ffffff');
+  }
+}
+function drawHeli() {
+  const x = Math.floor(heli.x), y = Math.floor(heli.y - Math.sin(heli.hop * Math.PI) * 10 + Math.sin(T * 2) * 1.5);
+  const c = COLOR.red.c, DK = '#3a3d46';
+  const spin = Math.floor(T * 18) % 2;
+  R(x + (spin ? 6 : 13), y, spin ? 34 : 20, 1, DK); R(x + 22, y + 1, 2, 3, DK);
+  R(x, y + 3, 3, 6, c[1]); R(x, y + 7, 15, 3, c[1]); R(x + (spin ? -1 : 1), y + 4 + (spin ? 0 : 2), 1, 3, DK);
+  R(x + 14, y + 4, 18, 10, c[1]); R(x + 12, y + 6, 22, 7, c[1]); R(x + 32, y + 7, 4, 5, c[1]);
+  R(x + 14, y + 4, 18, 1, c[0]); R(x + 12, y + 12, 24, 1, c[2]);
+  R(x + 26, y + 5, 8, 5, GLASS); R(x + 27, y + 6, 2, 1, '#ffffff');
+  R(x + 12, y + 10, 24, 1, '#f4f7fb');
+  R(x + 16, y + 13, 1, 4, DK); R(x + 29, y + 13, 1, 4, DK); R(x + 12, y + 17, 24, 1, DK);
+}
+function drawGround() {
+  circle(W * 0.12, L.hillY + 34, 56, '#8fd877');
+  circle(W * 0.88, L.hillY + 40, 60, '#8fd877');
+  circle(W * 0.5, L.hillY + 60, 90, '#7ccd66');
+  R(0, L.hillY + 8, W, L.floorY - L.hillY - 8, '#6cbf5a');
+  // trees when there is room beside the station
+  if (L.bldX >= 64) for (const tx of [L.bldX - 46, L.bldX + L.bldW + 30]) {
+    R(tx - 2, L.floorY - 16, 5, 16, '#7a4a2a');
+    circle(tx, L.floorY - 24, 11, '#3f9a45'); circle(tx - 3, L.floorY - 27, 6, '#5bb85a');
+  }
+}
+function drawStation() {
+  const x = L.bldX, w = L.bldW, top = L.bldTop, bot = L.floorY;
+  const BRICK = '#b5523b', MORTAR = '#934130', TRIM = '#efe3c6', TRIM2 = '#c9b893';
+  // bell tower
+  const tx = Math.floor(L.towerX), tt = top - 26;
+  R(tx - 14, tt - 6, 28, 3, TRIM); R(tx - 10, tt - 9, 20, 3, TRIM); R(tx - 5, tt - 12, 10, 3, TRIM);
+  R(tx - 12, tt - 3, 24, 30, BRICK);
+  R(tx - 8, tt + 2, 16, 18, '#3a3442'); R(tx - 8, tt + 2, 16, 1, '#2a2530');
+  const sw = bell.swing > 0 ? Math.round(Math.sin(bell.swing * 14) * 2) : 0;
+  const bx = tx + sw, by = tt + 5;
+  R(tx - 1, tt + 2, 2, 3, '#6b5a3a');
+  R(bx - 3, by, 6, 2, '#ffd21f'); R(bx - 4, by + 2, 8, 5, '#ffd21f'); R(bx - 5, by + 7, 10, 2, '#e0a81a');
+  R(bx - 2, by + 1, 1, 5, '#fff3a6'); R(bx - sw - 1, by + 9, 2, 2, '#8a6a20');
+  // main wall with bricks
+  R(x, top, w, bot - top, BRICK);
+  for (let yy = top + 3; yy < bot; yy += 4) {
+    R(x, yy, w, 1, MORTAR);
+    const off = ((yy - top) / 4) % 2 ? 0 : 4;
+    for (let xx = x + off; xx < x + w; xx += 8) R(xx, yy - 3, 1, 3, MORTAR);
+  }
+  R(x - 3, top - 4, w + 6, 4, TRIM); R(x - 3, top, w + 6, 1, TRIM2);
+  // sign
+  const signW = 104, sx = Math.floor(x + (w - signW) / 2);
+  R(sx - 1, top + 3, signW + 2, 16, TRIM); R(sx, top + 4, signW, 14, '#7a1f1f');
+  text('FIRE STATION', sx + 5, top + 6, 2, '#fff6e0');
+  // bays
+  L.bays.forEach(bx2 => {
+    R(bx2 - 2, L.bayTop - 2, L.bayW + 4, L.bayH + 2, TRIM);
+    R(bx2, L.bayTop, L.bayW, L.bayH, '#3a3442');
+    R(bx2, L.bayTop + 8, L.bayW, 1, '#463f50'); R(bx2, L.bayTop + 20, L.bayW, 1, '#463f50');
+    R(bx2, bot - 3, L.bayW, 3, '#57505f');
+    R(bx2, L.bayTop, L.bayW, 7, '#cdd2d8');
+    for (let k = 1; k < 7; k += 2) R(bx2, L.bayTop + k, L.bayW, 1, '#a9b0b8');
+  });
+}
+function drawRoad() {
+  R(0, L.roadY, W, L.roadH, '#4b4f5c');
+  R(0, L.roadY, W, 3, '#bdb8ac'); R(0, L.roadY + 3, W, 1, '#8f8b80');
+  R(0, L.roadY + L.roadH - 3, W, 3, '#bdb8ac');
+  for (let xx = 4; xx < W; xx += 20) R(xx, L.roadY + 22, 10, 2, '#ffd21f');
+}
+function drawProps() {
+  // dalmatian
+  const dx = L.dogX, dy = L.floorY - (dog.jump > 0 ? Math.round(Math.sin(dog.jump / 0.6 * Math.PI) * 8) : 0);
+  const WH = '#fbfbf7', BK = '#22222a';
+  const wag = Math.floor(T * (dog.jump > 0 ? 12 : 4)) % 2;
+  R(dx + 1, dy - 8 - wag, 2, 1, WH); R(dx, dy - 9 - wag, 1, 1, WH);
+  R(dx + 2, dy - 6, 5, 6, WH); R(dx + 3, dy - 9, 7, 6, WH);
+  R(dx + 9, dy - 5, 2, 5, WH); R(dx + 7, dy - 1, 4, 1, WH);
+  R(dx + 8, dy - 15, 6, 6, WH); R(dx + 13, dy - 12, 3, 3, WH);
+  R(dx + 8, dy - 15, 2, 5, BK); R(dx + 12, dy - 13, 1, 1, BK); R(dx + 15, dy - 12, 1, 1, BK);
+  R(dx + 8, dy - 9, 4, 1, '#e8222b');
+  R(dx + 4, dy - 7, 2, 1, BK); R(dx + 6, dy - 4, 1, 2, BK); R(dx + 3, dy - 3, 1, 1, BK); R(dx + 9, dy - 3, 1, 1, BK);
+  // hydrant
+  const hx = L.hydX, hy = L.floorY;
+  R(hx + 1, hy - 11, 7, 11, '#e8222b'); R(hx + 1, hy - 11, 2, 11, '#ff7a6b');
+  R(hx, hy - 13, 9, 2, '#a3121d'); R(hx + 3, hy - 15, 3, 2, '#a3121d');
+  R(hx - 2, hy - 8, 13, 3, '#a3121d'); R(hx, hy - 2, 9, 2, '#a3121d');
+}
+function drawVehicle(v) {
+  const moving = v.state !== 'parked';
+  const ph = Math.floor(T * 7) % 2;
+  let bob = (v.state === 'drive' || v.state === 'arrive') ? (Math.floor(v.x / 7) % 2 ? 0 : -1) : 0;
+  if (v.hop > 0) bob -= Math.round(Math.sin(v.hop / 0.35 * Math.PI) * 4);
+  SPRITE[v.kind](v.x, v.y, v.color, moving, ph, bob, v.rot);
+}
+function drawArrow() {
+  const v = V[selected];
+  const cx = Math.floor(v.x + v.len / 2), ty = Math.floor(v.y - v.h - 13 + Math.sin(T * 6) * 2);
+  R(cx - 3, ty - 1, 7, 6, '#1d1a2b'); R(cx - 6, ty + 4, 13, 2, '#1d1a2b');
+  R(cx - 5, ty + 6, 11, 1, '#1d1a2b'); R(cx - 4, ty + 7, 9, 1, '#1d1a2b'); R(cx - 3, ty + 8, 7, 1, '#1d1a2b');
+  R(cx - 2, ty + 9, 5, 1, '#1d1a2b'); R(cx - 1, ty + 10, 3, 1, '#1d1a2b');
+  R(cx - 2, ty, 5, 5, '#ffd21f'); R(cx - 5, ty + 5, 11, 1, '#ffd21f'); R(cx - 4, ty + 6, 9, 1, '#ffd21f');
+  R(cx - 3, ty + 7, 7, 1, '#ffd21f'); R(cx - 2, ty + 8, 5, 1, '#ffd21f'); R(cx - 1, ty + 9, 3, 1, '#ffd21f');
+}
+function drawPalette() {
+  R(0, L.palY, W, H - L.palY, '#5aa84c');
+  R(0, L.palY, W, 2, '#4a9440');
+  for (let xx = 7; xx < W; xx += 23) { R(xx, L.palY + 5 + (xx % 3), 1, 2, '#7cc96a'); R(xx + 11, H - 4 - (xx % 2), 1, 2, '#7cc96a'); }
+  const cur = V[selected].color, r = Math.floor(L.blob / 2);
+  for (const p of L.pots) {
+    const c = COLOR[p.key].c, on = p.key === cur;
+    const cy = p.cy - (on ? 2 : 0);
+    if (on) circle(p.cx, cy, r + 3, '#ffffff');
+    circle(p.cx, cy + 2, r, '#2f6b29');
+    circle(p.cx, cy, r, c[2]);
+    circle(p.cx, cy - 1, r - 1, c[1]);
+    circle(p.cx - Math.floor(r / 3), cy - Math.floor(r / 3), Math.max(2, Math.floor(r / 4)), c[0]);
+  }
+}
+function drawParticles() {
+  for (const p of parts) {
+    if (p.star) { const k = p.life / p.max; if (k > 0.3) { R(p.x - 1, p.y, 3, 1, p.c); R(p.x, p.y - 1, 1, 3, p.c); } continue; }
+    g.globalAlpha = Math.min(1, p.life / p.max * 1.5);
+    R(p.x, p.y, p.s, p.s, p.c);
+  }
+  g.globalAlpha = 1;
+}
+function draw() {
+  drawSky();
+  drawHeli();
+  drawGround();
+  drawStation();
+  drawRoad();
+  drawProps();
+  for (const v of V) if (v.state === 'parked') drawVehicle(v);
+  for (const v of V) if (v.state !== 'parked') drawVehicle(v);
+  drawParticles();
+  drawPalette();
+  drawArrow();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(lo, 0, 0, W * S, H * S);
+}
+
+/* ---------- loop ---------- */
+let last = performance.now();
+function frame(now) {
+  update(Math.min(0.05, (now - last) / 1000));
+  last = now;
+  draw();
+  requestAnimationFrame(frame);
+}
+new ResizeObserver(resize).observe(stage);
+resize();
+requestAnimationFrame(frame);
+
+// Home-screen icon helper: the fire truck on its road, as an n×n PNG data URL.
+window.__renderIcon = n => {
+  const c = document.createElement('canvas'); c.width = c.height = 80;
+  const prev = g; g = c.getContext('2d');
+  R(0, 0, 80, 80, '#8fd6ff'); R(0, 56, 80, 24, '#4b4f5c'); R(0, 56, 80, 3, '#bdb8ac');
+  for (let x = 2; x < 80; x += 16) R(x, 70, 8, 2, '#ffd21f');
+  drawFire(7, 64, 'red', false, 0, 0, 0.6);
+  g = prev;
+  const out = document.createElement('canvas'); out.width = out.height = n;
+  const o = out.getContext('2d'); o.imageSmoothingEnabled = false; o.drawImage(c, 0, 0, n, n);
+  return out.toDataURL('image/png');
+};
+})();
+</script>
+</body>
+</html>
