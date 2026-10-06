@@ -758,7 +758,12 @@ function fitStage() {
   if (!navigator.standalone || !window.screen) return;
   const portrait = innerHeight >= innerWidth;
   const sw = Math.min(screen.width, screen.height), sh = Math.max(screen.width, screen.height);
-  Object.assign(stage.style, { right: 'auto', bottom: 'auto', width: (portrait ? sw : sh) + 'px', height: (portrait ? sh : sw) + 'px' });
+  const w = (portrait ? sw : sh) + 'px', h = (portrait ? sh : sw) + 'px';
+  // A fixed element gets clipped to iOS's short viewport; an absolutely positioned one in a
+  // document of the full screen height is drawn all the way down to the bottom edge.
+  for (const el of [document.documentElement, document.body]) Object.assign(el.style, { width: w, height: h });
+  Object.assign(stage.style, { position: 'absolute', top: '0px', left: '0px', right: 'auto', bottom: 'auto', width: w, height: h });
+  window.scrollTo(0, 0);
 }
 let insetKey = '';
 // Some iOS home-screen apps report zero safe-area insets even though the status bar,
@@ -768,7 +773,7 @@ function readInsets() {
   const cs = getComputedStyle(probe);
   let [t, r, b, l] = ['Top', 'Right', 'Bottom', 'Left'].map(k => parseFloat(cs['padding' + k]) || 0);
   if (standalone) {
-    if (innerHeight >= innerWidth) { t = Math.max(t, 62); b = Math.max(b, 30); }
+    if (innerHeight >= innerWidth) { t = Math.max(t, 62); b = Math.max(b, 22); }
     else { l = Math.max(l, 56); r = Math.max(r, 56); b = Math.max(b, 20); }
   }
   return [t, r, b, l];
