@@ -549,6 +549,7 @@
     groundY: () => L.hillY,
     enter(arg) {
       pendingMission = null;
+      setClouds(L.safeT + 46, B.top - 50);
       if (arg && arg.returning != null) {
         const v = V[arg.returning];
         if (v.stopSiren) v.stopSiren();
