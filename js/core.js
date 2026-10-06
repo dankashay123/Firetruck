@@ -761,9 +761,17 @@ function fitStage() {
   Object.assign(stage.style, { right: 'auto', bottom: 'auto', width: (portrait ? sw : sh) + 'px', height: (portrait ? sh : sw) + 'px' });
 }
 let insetKey = '';
+// Some iOS home-screen apps report zero safe-area insets even though the status bar,
+// Dynamic Island and home indicator still cover the edges, so reserve room for them there.
+const standalone = navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
 function readInsets() {
   const cs = getComputedStyle(probe);
-  return ['Top', 'Right', 'Bottom', 'Left'].map(k => parseFloat(cs['padding' + k]) || 0);
+  let [t, r, b, l] = ['Top', 'Right', 'Bottom', 'Left'].map(k => parseFloat(cs['padding' + k]) || 0);
+  if (standalone) {
+    if (innerHeight >= innerWidth) { t = Math.max(t, 62); b = Math.max(b, 30); }
+    else { l = Math.max(l, 56); r = Math.max(r, 56); b = Math.max(b, 20); }
+  }
+  return [t, r, b, l];
 }
 // Safari fills in the safe-area insets a moment after launch (and on rotation) without
 // resizing anything, so keep checking and re-layout when they change.
