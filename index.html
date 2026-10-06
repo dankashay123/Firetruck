@@ -254,7 +254,7 @@ function drawAmb(x, yb, key, lit, ph, bob, rot) {
 const SPRITE = { fire: drawFire, police: drawPolice, amb: drawAmb };
 
 /* ---------- sound (all synthesized) ---------- */
-let ac = null, master = null, noiseBuf = null;
+let ac = null, master = null, voiceOut = null, noiseBuf = null;
 function initAudio() {
   try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}  // play even with the silent switch on
   if (!ac) {
@@ -265,6 +265,9 @@ function initAudio() {
     master.gain.value = 0.32;               // gentle on little ears
     const comp = ac.createDynamicsCompressor();
     master.connect(comp); comp.connect(ac.destination);
+    voiceOut = ac.createGain();             // voice skips the quiet master so it sits above the sirens
+    voiceOut.gain.value = 0.9;
+    voiceOut.connect(comp);
     noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -342,16 +345,63 @@ const SFX = {
   chop() { for (let i = 0; i < 16; i++) noise(i * 0.08, 0.06, 0.3, 260, 1.2); },
 };
 
-/* ---------- voice ---------- */
-function say(words) {
-  try {
-    if (!window.speechSynthesis) return;
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(words);
-    u.rate = 0.9; u.pitch = 1.15; u.volume = 1;
-    speechSynthesis.speak(u);
-  } catch (e) {}
+/* ---------- voice (recorded clips in audio/) ---------- */
+const LINES = {
+  fire:   ['fire-truck', 'here-comes-the-fire-truck', 'fire-truck-to-the-rescue'],
+  police: ['police-car', 'here-comes-the-police-car', 'police-car-on-duty'],
+  amb:    ['ambulance', 'here-comes-the-ambulance', 'ambulance-on-the-way', 'ambulance-here-to-help'],
+  wow:    ['ooh-pretty', 'now-thats-a-cool-color'],
+  parked: ['all-parked', 'great-job', 'you-did-it'],
+};
+const CLIP_NAMES = [...new Set([...Object.values(LINES).flat(), ...PALETTE.map(p => p[0]), 'back-to-the-station', 'helicopter', 'lets-go'])];
+const clipBytes = {}, clipBuf = {};
+for (const n of CLIP_NAMES) {
+  clipBytes[n] = fetch('audio/' + n + '.mp3').then(r => r.ok ? r.arrayBuffer() : null).catch(() => null);
 }
+function clip(n) {
+  if (!ac) return Promise.resolve(null);
+  if (!clipBuf[n]) clipBuf[n] = (clipBytes[n] || Promise.resolve(null)).then(b => b && new Promise(res => {
+    try { ac.decodeAudioData(b.slice(0), res, () => res(null)); } catch (e) { res(null); }
+  }));
+  return clipBuf[n];
+}
+const lastPick = {};
+function pick(key) {   // random line, never the same one twice in a row
+  const list = LINES[key];
+  let n;
+  do { n = list[Math.random() * list.length | 0]; } while (list.length > 1 && n === lastPick[key]);
+  return (lastPick[key] = n);
+}
+let voiceSrc = null, voiceToken = 0, voiceUntil = 0;
+function duck(dur) {   // dip the sirens while someone is talking
+  const n = ac.currentTime, g = master.gain;
+  g.cancelScheduledValues(n); g.setValueAtTime(g.value, n);
+  g.linearRampToValueAtTime(0.12, n + 0.08);
+  g.setValueAtTime(0.12, n + dur);
+  g.linearRampToValueAtTime(0.32, n + dur + 0.35);
+}
+// say('red') or say(['red', 'ooh-pretty']). A tap interrupts whatever is playing;
+// polite lines (e.g. on parking) are skipped if someone is already talking.
+function say(names, polite) {
+  if (!ac || (polite && ac.currentTime < voiceUntil)) return;
+  const token = ++voiceToken;
+  if (voiceSrc) { try { voiceSrc.stop(); } catch (e) {} voiceSrc = null; }
+  const list = [].concat(names);
+  const next = i => {
+    if (i >= list.length || token !== voiceToken) return;
+    clip(list[i]).then(buf => {
+      if (token !== voiceToken) return;
+      if (!buf) return next(i + 1);
+      const src = ac.createBufferSource();
+      src.buffer = buf; src.connect(voiceOut); src.start();
+      voiceSrc = src; voiceUntil = ac.currentTime + buf.duration;
+      duck(buf.duration);
+      src.onended = () => { if (voiceSrc === src) voiceSrc = null; next(i + 1); };
+    });
+  };
+  next(0);
+}
+let paintCount = 0;
 
 /* ---------- layout ---------- */
 function resize() {
@@ -420,7 +470,7 @@ function onTap(x, y) {
     if ((x - p.cx) ** 2 + (y - p.cy) ** 2 <= r * r) {
       const v = V[selected];
       v.color = p.key; v.hop = 0.35;
-      paintSplash(v, p.key); SFX.paint(); say(COLOR[p.key].name + '!'); saveColors();
+      paintSplash(v, p.key); SFX.paint(); say(++paintCount % 3 === 0 ? [p.key, pick('wow')] : p.key); saveColors();
       return;
     }
   }
@@ -430,7 +480,7 @@ function onTap(x, y) {
     const v = V[i];
     if (vehicleHit(v, i, x, y)) {
       selected = i;
-      if (v.state === 'parked') { say(v.name + '!'); startTrip(v); }
+      if (v.state === 'parked') { say(pick(v.kind)); startTrip(v); }
       else { SFX.honk(); v.hop = 0.3; }
       return;
     }
@@ -439,7 +489,7 @@ function onTap(x, y) {
   if (Math.abs(x - bx) < 14 && y > by - 14 && y < by + 12) { bell.swing = 1.4; SFX.bell(); return; }
   if (x >= L.dogX - 4 && x < L.dogX + 20 && y > L.floorY - 22 && y < L.floorY + 4) { dog.jump = 0.6; SFX.woof(); return; }
   if (x >= L.hydX - 5 && x < L.hydX + 14 && y > L.floorY - 20 && y < L.floorY + 4) { hydrant.spray = 1.6; SFX.water(); return; }
-  if (x >= heli.x - 4 && x < heli.x + 44 && y >= heli.y - 6 && y < heli.y + 24) { heli.hop = 1; heli.boost = 1.2; SFX.chop(); say('Helicopter!'); return; }
+  if (x >= heli.x - 4 && x < heli.x + 44 && y >= heli.y - 6 && y < heli.y + 24) { heli.hop = 1; heli.boost = 1.2; SFX.chop(); say('helicopter'); return; }
   if ((x - (W - 30)) ** 2 + (y - 30) ** 2 < 22 * 22) { sun.spin = 1; SFX.boing(); return; }
 }
 cv.addEventListener('pointerdown', e => {
@@ -460,7 +510,7 @@ document.getElementById('play').addEventListener('click', () => {
   initAudio();
   started = true;
   document.getElementById('start').hidden = true;
-  say("Let's go!");
+  say('lets-go');
   keepAwake();
 });
 document.addEventListener('visibilitychange', () => {
@@ -482,7 +532,7 @@ function update(dt) {
     } else if (v.state === 'drive') {
       v.speed = Math.min(150, v.speed + 260 * dt);
       v.x += v.speed * dt;
-      if (!v.lap && v.x > W + 8) { v.x = -v.len - 8; v.lap = true; }
+      if (!v.lap && v.x > W + 8) { v.x = -v.len - 8; v.lap = true; say('back-to-the-station', true); }
       if (v.lap && v.x >= v.homeX - 45) v.state = 'arrive';
     } else if (v.state === 'arrive') {
       v.x = Math.min(v.homeX, v.x + Math.max(18, (v.homeX - v.x) * 3) * dt);
@@ -490,7 +540,7 @@ function update(dt) {
     } else if (v.state === 'enter') {
       v.t += dt; const k = Math.min(1, v.t / 0.6);
       v.y = L.laneY + (L.floorY - 1 - L.laneY) * ease(k);
-      if (k >= 1) { v.state = 'parked'; if (v.stopSiren) v.stopSiren(); v.stopSiren = null; }
+      if (k >= 1) { v.state = 'parked'; if (v.stopSiren) v.stopSiren(); v.stopSiren = null; say(pick('parked'), true); }
     }
     v.rot += (v.x - x0) / 5;
     if (v.state === 'drive' || v.state === 'arrive') {
