@@ -109,7 +109,8 @@
 
   /* ---------- sound ---------- */
   const narrBytes = {}, narrBuf = {};
-  let narrSrc = null, narrTok = 0;
+  let narrSrc = null, narrTok = 0, narrEnd = 0;
+  const narrSrcs = [];
   function loadNarr(n) {
     return narrBytes[n] || (narrBytes[n] = fetch('audio/movie-police-' + n + '.mp3').then(r => r.ok ? r.arrayBuffer() : null).catch(() => null));
   }
@@ -119,17 +120,19 @@
       try { ac.decodeAudioData(b.slice(0), res, () => res(null)); } catch (e) { res(null); }
     })));
   }
-  function stopNarr() { if (narrSrc) { try { narrSrc.stop(); } catch (e) {} narrSrc = null; } }
+  function stopNarr() { for (const s of narrSrcs.splice(0)) { try { s.stop(); } catch (e) {} } narrSrc = null; narrEnd = 0; }
   function narrate(n, fallback) {
-    const tok = ++narrTok;
+    const run = ++narrTok;
     decodeNarr(n).then(buf => {
-      if (tok !== narrTok || !st.on) return;
+      if (!st.on || run < narrTok - 3) return;
       if (!buf) { if (fallback) fallback(); return; }
-      stopNarr();
+      // a line that's still playing finishes first; this one follows right after it
+      const when = Math.max(ac.currentTime, narrEnd + 0.12);
       const s = ac.createBufferSource();
-      s.buffer = buf; s.connect(voiceOut); s.start();
-      narrSrc = s; duck(buf.duration);
-      s.onended = () => { if (narrSrc === s) narrSrc = null; };
+      s.buffer = buf; s.connect(voiceOut); s.start(when);
+      narrEnd = when + buf.duration; narrSrc = s; narrSrcs.push(s);
+      duck(narrEnd - ac.currentTime);
+      s.onended = () => { const i = narrSrcs.indexOf(s); if (i >= 0) narrSrcs.splice(i, 1); if (narrSrc === s) narrSrc = null; };
     });
   }
   const sirenOn = () => { if (!st.stopSiren) st.stopSiren = siren('police'); };

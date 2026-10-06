@@ -26,6 +26,7 @@
 
   /* ---------- narration: optional clips recorded by a parent ---------- */
   const narrBuf = {}, narrSrcs = [];
+  let narrEnd = 0;
   function loadNarr(n) {
     if (!narrBuf[n] && ac) {
       const name = 'audio/movie-amb-' + String(n).padStart(2, '0') + '.mp3';
@@ -40,9 +41,12 @@
       if (run !== st.run || scene !== 'movieAmb') return;
       if (!buf) { if (fallback) say(fallback); return; }
       say([]);   // hush any built-in line still talking
+      // a line that's still playing finishes first; this one follows right after it
+      const when = Math.max(ac.currentTime, narrEnd + 0.12);
       const src = ac.createBufferSource();
-      src.buffer = buf; src.connect(voiceOut); src.start();
-      duck(buf.duration);
+      src.buffer = buf; src.connect(voiceOut); src.start(when);
+      narrEnd = when + buf.duration;
+      duck(narrEnd - ac.currentTime);
       narrSrcs.push(src);
       src.onended = () => { const i = narrSrcs.indexOf(src); if (i >= 0) narrSrcs.splice(i, 1); };
     });
@@ -936,6 +940,7 @@
     stopSiren();
     if (rumble) rumble(0);
     for (const s of narrSrcs.splice(0)) { try { s.stop(); } catch (e) {} }
+    narrEnd = 0;
     if (st.saved) { clouds = st.saved; st.saved = null; }
   }
   function finish() {

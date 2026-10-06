@@ -1,6 +1,6 @@
 // Offline support: everything the game needs is cached on first visit.
 // Bump VERSION whenever any file changes so devices pick up the update.
-const VERSION = 'fire-station-v19';
+const VERSION = 'fire-station-v20';
 const FILES = [
   './',
   './index.html',

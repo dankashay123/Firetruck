@@ -30,7 +30,7 @@
     { t0: 0.0,  t1: 2.6,  need: [92, 150], cap: 2 },   // 1 station cutaway: crew relaxing
     { t0: 2.6,  t1: 4.4,  need: [50, 60],  cap: 3 },   // 2 close-up: the alarm bell rings
     { t0: 4.4,  t1: 6.4,  need: [92, 150], cap: 2 },   // 3 cutaway: down the pole
-    { t0: 6.4,  t1: 7.6,  need: [50, 50],  cap: 3 },   // 4 close-up: boots hit the floor
+    { t0: 6.4,  t1: 7.6,  need: [56, 70],  cap: 3 },   // 4 close-up: the crew lands at the bottom of the pole
     { t0: 7.6,  t1: 10.6, need: [92, 140], cap: 2 },   // 5 station front: door up, truck out
     { t0: 10.6, t1: 12.4, need: [62, 60],  cap: 3 },   // 6 close-up: light bar and wheels
     { t0: 12.4, t1: 15.4, need: [90, 100], cap: 2 },   // 7 bird's-eye: through the streets
@@ -46,7 +46,8 @@
   let t = 0, ev = 0, shotI = -1, exiting = false;
   let Z = 1, WW = 100, HH = 100, SL = 0, SR = 0, ST = 0, SB = 0;
   let shakeX = 0, shakeY = 0, push = 1, focus = [0, 0];
-  let stopSiren = null, sirenOn = false, music = false, musicT = 0, musicI = 0, narrSrc = null;
+  let stopSiren = null, sirenOn = false, music = false, musicT = 0, musicI = 0, narrSrc = null, narrEnd = 0;
+  const narrSrcs = [];
   let hearts = [], taps = [], lights = [], car = null;
   const onceSet = new Set();
   const once = key => !onceSet.has(key) && !!onceSet.add(key);
@@ -79,11 +80,13 @@
       if (!b) { if (fallback) say(fallback === 'praise' ? pick('praise') : fallback); return; }
       voiceToken++;
       if (voiceSrc) { try { voiceSrc.stop(); } catch (e) {} voiceSrc = null; }
-      stopNarr();
+      // a line that's still playing finishes first; this one follows right after it
+      const when = Math.max(ac.currentTime, narrEnd + 0.12);
       const src = ac.createBufferSource();
-      src.buffer = b; src.connect(voiceOut); src.start();
-      narrSrc = src; voiceUntil = ac.currentTime + b.duration; duck(b.duration);
-      src.onended = () => { if (narrSrc === src) narrSrc = null; };
+      src.buffer = b; src.connect(voiceOut); src.start(when);
+      narrEnd = when + b.duration; narrSrc = src; narrSrcs.push(src);
+      voiceUntil = narrEnd; duck(narrEnd - ac.currentTime);
+      src.onended = () => { const i = narrSrcs.indexOf(src); if (i >= 0) narrSrcs.splice(i, 1); if (narrSrc === src) narrSrc = null; };
     };
     // a recording that is still decoding gets 0.25 s, then the line is skipped (or the fallback plays)
     if (!p) return go(null);
@@ -91,7 +94,7 @@
     p.then(b => { if (!settled && scene === 'movieFire') { settled = true; go(b); } });
     setTimeout(() => { if (!settled) { settled = true; go(null); } }, 250);
   }
-  function stopNarr() { if (narrSrc) { try { narrSrc.stop(); } catch (e) {} narrSrc = null; } }
+  function stopNarr() { for (const s of narrSrcs.splice(0)) { try { s.stop(); } catch (e) {} } narrSrc = null; narrEnd = 0; }
 
   /* ---------- music: a little marching tune, scheduled note by note ---------- */
   const NOTE = m => 440 * 2 ** ((m - 69) / 12);
@@ -381,9 +384,20 @@
     R(wx - 30, G.gy - 46, 40, 30, COLOR[V[VI.fire].color].c[1]); R(wx - 30, G.gy - 20, 40, 2, '#f4f7fb');
     circle(wx, G.gy - 13, 15, WELL); wheel(wx, G.gy - 13, 13, 0);
     R(G.poleX - 2, 0, 4, G.gy, '#e0b010'); R(G.poleX - 2, 0, 1, G.gy, '#fff3a6');
-    const fall = (a, b) => { const k = k01(u, a, b); return lerp(-10, G.gy, k * k); };
-    boot(G.bx, fall(0, 0.25), 0);
-    boot(G.bx + 18, fall(0.4, 0.65), 1);
+    // two firefighters whoosh down the pole, land with a puff of dust, cheer and run for the truck
+    for (const [i, a, b] of [[0, 0, 0.32], [1, 0.3, 0.62]]) {
+      const k = k01(u, a, b), landed = u >= b;
+      if (u < a) continue;
+      const run = landed ? Math.min(1, (u - b) / 0.3) : 0;
+      const yb = landed ? G.gy : lerp(G.gy - 60, G.gy, k * k);
+      const x = G.poleX + 5 + run * 24;
+      drawPerson({ type: 'ff', x, yb, dir: landed ? 1 : -1, pose: landed ? (run < 0.25 ? 'cheer' : 'stand') : 'slide',
+        walk: landed && run >= 0.25, skin: SKIN[i ? 2 : 0], seed: i * 3 });
+      if (landed && u - b < 0.18) {
+        const d = (u - b) / 0.18;
+        alpha(1 - d, () => { R(x - 9 - d * 6, G.gy - 3, 4, 3, '#cfc8bd'); R(x + 6 + d * 6, G.gy - 3, 4, 3, '#cfc8bd'); R(x - 4, G.gy - 5 - d * 4, 3, 2, '#e6e0d6'); });
+      }
+    }
   }
 
   /* ---------- 5 + 13: the station from the street ---------- */
