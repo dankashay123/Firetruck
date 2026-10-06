@@ -342,6 +342,9 @@ const SFX = {
   woof() { [0, 0.25].forEach(s => { tone('sawtooth', 320, s, 0.14, 0.18, 110); noise(s, 0.1, 0.12, 500, 1.5); }); },
   boing() { tone('sine', 200, 0, 0.18, 0.2, 700); tone('sine', 700, 0.18, 0.3, 0.15, 300); },
   water() { noise(0, 1.6, 0.18, 1800, 0.6); },
+  sizzle() { noise(0, 0.7, 0.3, 3200, 0.6); tone('sine', 900, 0, 0.5, 0.08, 250); tone('sine', 1568, 0.15, 0.3, 0.12); },
+  brake() { noise(0, 0.45, 0.22, 2600, 0.5); },
+  fanfare() { [523, 659, 784, 1047].forEach((f, i) => tone('square', f, i * 0.13, 0.16, 0.09)); [523, 659, 784, 1047].forEach(f => tone('triangle', f, 0.6, 0.9, 0.12)); },
   chop() { for (let i = 0; i < 16; i++) noise(i * 0.08, 0.06, 0.3, 260, 1.2); },
 };
 
@@ -431,9 +434,12 @@ function layout() {
   L.dogX = Math.max(2, L.bldX - 19);
   L.hydX = L.bldX + L.bldW + Math.min(10, Math.floor((W - L.bldX - L.bldW - 9) / 2));
   L.towerX = L.bldX + L.bldW / 2;
+  layoutFire();
   const total = 9 * L.blob + 8 * L.gap;
   L.pots = PALETTE.map((p, i) => ({ key: p[0], cx: Math.floor((W - total) / 2) + i * (L.blob + L.gap) + L.blob / 2, cy: L.palY + Math.floor(L.palH / 2) }));
+  if (F.state === 'mission') F.state = 'off';   // a resize parks everyone, so cancel a pending mission
   V.forEach((v, i) => {
+    v.mission = false;
     v.homeX = L.bays[i] + Math.floor((L.bayW - v.len) / 2);
     if (v.stopSiren) v.stopSiren();
     Object.assign(v, { x: v.homeX, y: L.floorY - 1, state: 'parked', stopSiren: null });
@@ -463,7 +469,10 @@ function vehicleHit(v, i, x, y) {
   if (v.state === 'parked') return x >= L.bays[i] - 3 && x < L.bays[i] + L.bayW + 3 && y >= L.bayTop - 4 && y < L.floorY + 4;
   return x >= v.x - 6 && x < v.x + v.len + 6 && y >= v.y - v.h - 6 && y < v.y + 6;
 }
-function onTap(x, y) {
+function onTap(x, y, id) {
+  if (wipe) return;
+  if (scene === 'fire') { fireTap(x, y, id); return; }
+  if (F.state !== 'mission' && (x - F.fireBtn.x) ** 2 + (y - F.fireBtn.y) ** 2 <= (F.fireBtn.r + 6) ** 2) { startMission(); return; }
   // paint pots
   const r = L.blob / 2 + 4;
   for (const p of L.pots) {
@@ -496,9 +505,18 @@ cv.addEventListener('pointerdown', e => {
   if (!started) return;
   e.preventDefault();
   initAudio();
-  const rect = cv.getBoundingClientRect();
-  onTap((e.clientX - rect.left) * dpr / S, (e.clientY - rect.top) * dpr / S);
+  const p = toVirtual(e);
+  onTap(p.x, p.y, e.pointerId);
 });
+function toVirtual(e) {
+  const rect = cv.getBoundingClientRect();
+  return { x: (e.clientX - rect.left) * dpr / S, y: (e.clientY - rect.top) * dpr / S };
+}
+cv.addEventListener('pointermove', e => {
+  if (e.pointerId !== held || scene !== 'fire') return;
+  const p = toVirtual(e); aimAt(p.x, p.y);
+});
+['pointerup', 'pointercancel'].forEach(t => cv.addEventListener(t, e => { if (e.pointerId === held) held = null; }));
 ['gesturestart', 'dblclick', 'contextmenu'].forEach(t => document.addEventListener(t, e => e.preventDefault()));
 document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 
@@ -522,6 +540,8 @@ document.addEventListener('visibilitychange', () => {
 const ease = k => k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
 function update(dt) {
   T += dt;
+  if (wipe) { wipe.t += dt; if (!wipe.switched && wipe.t >= 0.35) { wipe.switched = true; wipe.fn(); } if (wipe.t >= 0.7) wipe = null; }
+  if (scene === 'fire') updateFire(dt);
   for (const v of V) {
     const x0 = v.x;
     v.hop = Math.max(0, v.hop - dt);
@@ -532,7 +552,10 @@ function update(dt) {
     } else if (v.state === 'drive') {
       v.speed = Math.min(150, v.speed + 260 * dt);
       v.x += v.speed * dt;
-      if (!v.lap && v.x > W + 8) { v.x = -v.len - 8; v.lap = true; say('back-to-the-station', true); }
+      if (!v.lap && v.x > W + 8) {
+        if (v.mission) { v.mission = false; v.state = 'away'; v.x = W + 200; startWipe(enterFire); continue; }
+        v.x = -v.len - 8; v.lap = true; say('back-to-the-station', true);
+      }
       if (v.lap && v.x >= v.homeX - 45) v.state = 'arrive';
     } else if (v.state === 'arrive') {
       v.x = Math.min(v.homeX, v.x + Math.max(18, (v.homeX - v.x) * 3) * dt);
@@ -567,7 +590,7 @@ function update(dt) {
 /* ---------- draw ---------- */
 function drawSky() {
   const bands = ['#7ccdff', '#8fd6ff', '#a4deff', '#b9e7ff', '#cdeffd'];
-  const bh = Math.ceil(L.hillY / bands.length);
+  const bh = Math.ceil((L.hillY + 10) / bands.length);
   bands.forEach((c, i) => R(0, i * bh, W, bh + 1, c));
   // sun
   const sx = W - 30, sy = 30, spin = sun.spin > 0 ? (1 - sun.spin) * Math.PI * 2 : 0;
@@ -604,7 +627,7 @@ function drawGround() {
   circle(W * 0.5, L.hillY + 60, 90, '#7ccd66');
   R(0, L.hillY + 8, W, L.floorY - L.hillY - 8, '#6cbf5a');
   // trees when there is room beside the station
-  if (L.bldX >= 64) for (const tx of [L.bldX - 46, L.bldX + L.bldW + 30]) {
+  if (scene === 'station' && L.bldX >= 64) for (const tx of [L.bldX - 46, L.bldX + L.bldW + 30]) {
     R(tx - 2, L.floorY - 16, 5, 16, '#7a4a2a');
     circle(tx, L.floorY - 24, 11, '#3f9a45'); circle(tx - 3, L.floorY - 27, 6, '#5bb85a');
   }
@@ -711,6 +734,7 @@ function draw() {
   drawSky();
   drawHeli();
   drawGround();
+  if (scene === 'fire') { drawFireScene(); drawWipe(); ctx.imageSmoothingEnabled = false; ctx.drawImage(lo, 0, 0, W * S, H * S); return; }
   drawStation();
   drawRoad();
   drawProps();
@@ -719,8 +743,282 @@ function draw() {
   drawParticles();
   drawPalette();
   drawArrow();
+  drawFireButton();
+  drawWipe();
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(lo, 0, 0, W * S, H * S);
+}
+
+/* ---------- fire mission: "Spray the Fire" ---------- */
+let scene = 'station';
+let wipe = null;          // pixel-blind scene transition
+const F = { state: 'off', flames: [], tx: 0, spray: 0, aimX: 0, aimY: 0, doneT: 0, crackle: 0, smoke: 0, wall: '#f2d16b', jump: 0 };
+let held = null;          // pointer id currently holding the hose
+let sprayGain = null;
+const HOUSE_COLORS = ['#f2d16b', '#9ad0f5', '#f5a3c7', '#b6e3a1', '#f0b27a', '#c9b6f2'];
+const SKIN = ['#f1c7a0', '#d9a273', '#a86b45', '#7a4a2e'];
+
+function startWipe(fn) { wipe = { t: 0, fn, switched: false }; }
+function layoutFire() {
+  F.rows = Math.max(2, Math.min(4, Math.floor((L.floorY - 50) / 28)));
+  F.hw = 96; F.hh = F.rows * 28 + 4;
+  F.x0 = Math.floor((W - 204) / 2);
+  F.truckX = F.x0; F.ffX = F.x0 + 72; F.hx = F.x0 + 108; F.hy = L.floorY - F.hh;
+  F.windows = [];
+  for (let r = 0; r < F.rows; r++) for (let c = 0; c < 3; c++) {
+    if (r === 0 && c === 1) continue;  // front door
+    F.windows.push({ x: F.hx + 10 + c * 30, y: L.floorY - (r + 1) * 28 + 7 });
+  }
+  F.nozX = F.ffX + 14; F.nozY = L.laneY - 15;
+  F.homeBtn = { x: 8, y: L.palY + Math.floor((L.palH - L.blob) / 2), s: L.blob };
+  const big = L.blob + 10;
+  F.againBtn = { x: Math.floor(W / 2 - big / 2), y: L.palY + Math.floor((L.palH - big) / 2), s: big };
+  F.fireBtn = { x: 20, y: 20, r: 15 };
+  if (F.state !== 'arrive') F.tx = F.truckX;
+}
+function newFire() {
+  const idx = F.windows.map((_, i) => i).sort(() => Math.random() - 0.5);
+  const n = Math.min(idx.length, 3 + (Math.random() * (F.rows > 2 ? 4 : 2) | 0));
+  F.flames = idx.slice(0, n).map(i => ({ w: i, hp: 1, seed: Math.random() * 10, out: false, who: Math.random() * 3 | 0, skin: SKIN[Math.random() * SKIN.length | 0] }));
+  F.wall = HOUSE_COLORS[Math.random() * HOUSE_COLORS.length | 0];
+  F.doneT = 0; F.spray = 0; F.jump = 0;
+  parts = [];
+}
+function startMission() {
+  const v = V[1];
+  if (F.state === 'mission' || scene !== 'station' || wipe) return;
+  selected = 1;
+  SFX.bell();
+  v.mission = true; F.state = 'mission';
+  if (v.state === 'parked') startTrip(v);
+  else if (v.lap || v.state === 'enter') {   // already heading home: turn around and go
+    if (!v.stopSiren) v.stopSiren = siren('fire');
+    Object.assign(v, { state: 'drive', lap: false, y: L.laneY });
+  }
+}
+function enterFire() {
+  scene = 'fire'; parts = [];
+  F.state = 'arrive'; F.tx = -72;
+  newFire();
+}
+function goHome() {
+  if (wipe) return;
+  setSpray(false); held = null;
+  startWipe(() => {
+    scene = 'station'; parts = []; F.state = 'off';
+    const v = V[1];
+    if (v.stopSiren) { v.stopSiren(); v.stopSiren = null; }
+    Object.assign(v, { state: 'drive', lap: true, mission: false, x: -v.len - 8, y: L.laneY, speed: 120 });
+  });
+}
+function setSpray(on) {
+  if (!ac) return;
+  if (!sprayGain) {
+    const s = ac.createBufferSource(), f = ac.createBiquadFilter();
+    sprayGain = ac.createGain(); sprayGain.gain.value = 0;
+    s.buffer = noiseBuf; s.loop = true;
+    f.type = 'bandpass'; f.frequency.value = 1400; f.Q.value = 0.7;
+    s.connect(f); f.connect(sprayGain); sprayGain.connect(master); s.start();
+  }
+  sprayGain.gain.setTargetAtTime(on ? 0.35 : 0, ac.currentTime, 0.05);
+}
+function aimAt(x, y) {
+  // toddler aim assist: snap to the nearest burning window within reach
+  let best = null, bd = 34 * 34;
+  for (const f of F.flames) {
+    if (f.out) continue;
+    const w = F.windows[f.w], cx = w.x + 8, cy = w.y + 4;
+    const d = (x - cx) ** 2 + (y - cy) ** 2;
+    if (d < bd) { bd = d; best = [cx, cy]; }
+  }
+  [F.aimX, F.aimY] = best || [x, Math.min(y, L.laneY - 4)];
+}
+function inBox(b, x, y) { return x >= b.x - 4 && x < b.x + b.s + 4 && y >= b.y - 4 && y < b.y + b.s + 4; }
+function fireTap(x, y, id) {
+  if (inBox(F.homeBtn, x, y)) { goHome(); return; }
+  if (F.state === 'done' && F.doneT > 1.2 && inBox(F.againBtn, x, y)) { SFX.bell(); newFire(); F.state = 'spray'; return; }
+  if (F.state === 'spray') { held = id; aimAt(x, y); F.spray = 0.4; }
+}
+
+function updateFire(dt) {
+  if (F.state === 'arrive') {
+    F.tx = Math.min(F.truckX, F.tx + Math.max(22, Math.min(150, (F.truckX - F.tx) * 2.5)) * dt);
+    V[1].rot += dt * 20;
+    F.smoke -= dt;
+    if (F.smoke <= 0) { F.smoke = 0.09; parts.push({ x: F.tx - 1, y: L.laneY - 7, vx: -12, vy: -14, g: 0, life: 0.6, max: 0.6, s: 2, c: '#c9ccd3' }); }
+    if (F.tx >= F.truckX) {
+      F.state = 'spray';
+      const v = V[1]; if (v.stopSiren) { v.stopSiren(); v.stopSiren = null; }
+      SFX.brake();
+    }
+  }
+  if (held !== null && F.state === 'spray') F.spray = 0.3;
+  F.spray = Math.max(0, F.spray - dt);
+  const spraying = F.spray > 0 && F.state === 'spray';
+  setSpray(spraying);
+  if (spraying) {
+    spawn(2, () => ({ x: F.aimX, y: F.aimY, vx: (Math.random() - 0.5) * 70, vy: -20 - Math.random() * 50, g: 260, life: 0.45, max: 0.45, s: 1 + (Math.random() * 2 | 0), c: Math.random() < 0.5 ? '#6fc8ff' : '#ffffff' }));
+  }
+  let burning = 0;
+  for (const f of F.flames) {
+    if (f.out) continue;
+    const w = F.windows[f.w], cx = w.x + 8, cy = w.y + 4;
+    if (spraying && Math.abs(F.aimX - cx) < 12 && Math.abs(F.aimY - cy) < 14) {
+      f.hp -= dt / 0.9;
+      if (Math.random() < 0.5) parts.push({ x: cx + (Math.random() - 0.5) * 10, y: w.y, vx: (Math.random() - 0.5) * 10, vy: -25, g: 0, life: 0.8, max: 0.8, s: 3, c: '#dfe3ea' });
+    }
+    if (f.hp <= 0) {
+      f.out = true; SFX.sizzle();
+      spawn(14, () => ({ x: cx + (Math.random() - 0.5) * 14, y: w.y + Math.random() * 8, vx: (Math.random() - 0.5) * 20, vy: -20 - Math.random() * 25, g: 0, life: 1.1, max: 1.1, s: 3, c: Math.random() < 0.5 ? '#c9ccd3' : '#eef0f4' }));
+      spawn(8, () => ({ x: cx + (Math.random() - 0.5) * 20, y: cy + (Math.random() - 0.5) * 16, vx: 0, vy: -12, g: 0, life: 0.7, max: 0.7, s: 1, c: '#fff27a', star: true }));
+      continue;
+    }
+    burning++;
+    if (Math.random() < dt * 5) parts.push({ x: cx + (Math.random() - 0.5) * 8, y: w.y - 12 * f.hp, vx: 4, vy: -14, g: 0, life: 1.2, max: 1.2, s: 3, c: '#7d7f88' });
+  }
+  if (burning && F.state === 'spray') {
+    F.crackle -= dt;
+    if (F.crackle <= 0) { F.crackle = 0.05 + Math.random() * 0.18; noise(0, 0.03, 0.06, 1500 + Math.random() * 2500, 3); }
+  }
+  if (!burning && F.state === 'spray' && F.flames.length) { F.state = 'done'; F.doneT = 0; held = null; SFX.fanfare(); }
+  if (F.state === 'done') {
+    F.doneT += dt;
+    F.jump = Math.abs(Math.sin(F.doneT * 6)) * (F.doneT < 2.5 ? 5 : 0);
+    if (F.doneT < 1.8) spawn(3, () => ({ x: Math.random() * W, y: -2, vx: (Math.random() - 0.5) * 30, vy: 30 + Math.random() * 40, g: 40, life: 2.5, max: 2.5, s: 2, c: PALETTE[Math.random() * 7 | 0][2][1] }));
+  }
+}
+
+/* ---------- fire scene drawing ---------- */
+function flame(cx, by, size, seed) {
+  const h = Math.round(5 + size * 15), w = Math.round(5 + size * 9);
+  for (let i = 0; i < w; i++) {
+    const edge = 1 - Math.abs((i - (w - 1) / 2) / (w / 2));
+    const fl = 0.7 + 0.3 * Math.sin(T * 14 + i * 1.3 + seed);
+    const hh = Math.max(1, Math.round(h * edge * fl));
+    const x = cx - (w >> 1) + i;
+    R(x, by - hh, 1, hh, '#e8222b');
+    const h2 = Math.round(hh * 0.7); if (h2) R(x, by - h2, 1, h2, '#f57a12');
+    const h3 = Math.round(hh * 0.4); if (h3) R(x, by - h3, 1, h3, '#ffd21f');
+  }
+}
+function drawFireScene() {
+  const hx = F.hx, hy = F.hy, hw = F.hw, wall = F.wall;
+  // roof and chimney
+  R(hx + hw - 26, hy - 24, 8, 16, '#8e3b2a');
+  for (let k = 0; k * 8 < hw + 8; k++) R(hx - 4 + k * 4, hy - 2 - k * 2, hw + 8 - k * 8, 2, k % 2 ? '#a3473a' : '#b5523b');
+  R(hx - 5, hy - 2, hw + 10, 2, '#7a2f24');
+  // walls
+  R(hx, hy, hw, F.hh, wall);
+  g.globalAlpha = 0.15; R(hx, hy, 3, F.hh, '#000000'); R(hx + hw - 3, hy, 3, F.hh, '#000000'); g.globalAlpha = 1;
+  for (let r = 1; r < F.rows; r++) R(hx, L.floorY - r * 28, hw, 1, '#ffffff');
+  // door
+  const dx = hx + 40;
+  R(dx - 1, L.floorY - 23, 18, 23, '#ffffff'); R(dx, L.floorY - 22, 16, 22, '#8a5a3a');
+  R(dx + 2, L.floorY - 20, 12, 8, '#9c6a48'); R(dx + 12, L.floorY - 11, 2, 2, '#ffd21f');
+  // windows
+  const byWin = {}; F.flames.forEach(f => { byWin[f.w] = f; });
+  F.windows.forEach((w, i) => {
+    const f = byWin[i];
+    R(w.x - 2, w.y - 2, 20, 18, '#ffffff');
+    if (f && !f.out) {
+      R(w.x, w.y, 16, 14, Math.floor(T * 8 + f.seed) % 2 ? '#ffb347' : '#ff9a3a');
+      g.globalAlpha = 0.25; circle(w.x + 8, w.y + 6, 12, '#ff9a3a'); g.globalAlpha = 1;
+    } else if (f && f.out) {
+      R(w.x, w.y, 16, 14, '#fff3c4');
+      const cx = w.x + 8, wave = Math.floor(T * 6 + f.seed) % 2;
+      if (f.who === 2) {   // a kitty
+        circle(cx, w.y + 8, 4, '#9aa3ad'); R(cx - 4, w.y + 2, 2, 3, '#9aa3ad'); R(cx + 3, w.y + 2, 2, 3, '#9aa3ad');
+        R(cx - 2, w.y + 7, 1, 1, '#22222a'); R(cx + 2, w.y + 7, 1, 1, '#22222a'); R(cx, w.y + 9, 1, 1, '#ff6fb4');
+      } else {             // a neighbor, waving
+        const px = cx - 2;
+        R(px - 5, w.y + 11, 11, 3, f.who ? '#2a6fe0' : '#3fb43a');
+        circle(px, w.y + 6, 4, f.skin);
+        R(px - 4, w.y + 1, 9, 3, f.who ? '#5a3a22' : '#e8b03a');
+        R(px - 2, w.y + 5, 1, 2, '#22222a'); R(px + 2, w.y + 5, 1, 2, '#22222a');
+        R(px - 2, w.y + 8, 1, 1, '#a3121d'); R(px - 1, w.y + 9, 3, 1, '#a3121d'); R(px + 2, w.y + 8, 1, 1, '#a3121d');
+        R(px + 6, w.y + (wave ? 2 : 4), 2, 7, f.skin);
+      }
+      g.globalAlpha = 0.3; R(w.x + 2, w.y - 5, 12, 3, '#3a3d46'); g.globalAlpha = 1;
+    } else {
+      R(w.x, w.y, 16, 14, '#bfe6ff'); R(w.x + 2, w.y + 2, 3, 2, '#ffffff');
+    }
+    if (!(f && f.out)) R(w.x + 7, w.y, 2, 14, '#ffffff');
+    if (f && !f.out) flame(w.x + 8, w.y + 14, f.hp, f.seed);
+  });
+  drawRoad();
+  // truck, hose, firefighter
+  const v = V[1], ph = Math.floor(T * 7) % 2;
+  const bob = F.state === 'arrive' ? (Math.floor(F.tx / 7) % 2 ? 0 : -1) : 0;
+  if (F.state !== 'arrive') {
+    R(F.truckX + 30, L.laneY - 2, F.ffX - F.truckX - 28, 2, '#3a3d46');
+  }
+  SPRITE.fire(Math.floor(F.tx), L.laneY, v.color, true, ph, bob, v.rot);
+  if (F.state !== 'arrive') drawFirefighter(F.ffX, L.laneY - Math.round(F.jump));
+  if (F.spray > 0 && F.state === 'spray') drawStream();
+  drawParticles();
+  drawStrip();
+  drawHomeButton(F.homeBtn);
+  if (F.state === 'done' && F.doneT > 1.2) drawAgainButton(F.againBtn);
+}
+function drawFirefighter(x, yb) {
+  R(x + 2, yb - 3, 3, 3, '#22222a'); R(x + 6, yb - 3, 3, 3, '#22222a');
+  R(x + 2, yb - 8, 7, 5, '#c9a24a'); R(x + 2, yb - 6, 7, 1, '#e9f56b');
+  R(x + 1, yb - 15, 9, 8, '#d8b04f'); R(x + 1, yb - 11, 9, 1, '#e9f56b');
+  R(x + 3, yb - 19, 5, 4, '#f1c7a0'); R(x + 6, yb - 18, 1, 1, '#22222a'); R(x + 5, yb - 16, 2, 1, '#a3121d');
+  R(x + 2, yb - 21, 7, 2, '#e8222b'); R(x + 1, yb - 19, 10, 1, '#e8222b'); R(x + 4, yb - 22, 3, 1, '#e8222b');
+  R(x + 8, yb - 14, 4, 2, '#d8b04f'); R(x + 11, yb - 16, 3, 3, '#9aa3ad');
+  R(x, yb - 13, 2, 11, '#3a3d46');   // hose up the back
+}
+function drawStream() {
+  const nx = F.nozX, ny = F.nozY, tx = F.aimX, ty = F.aimY;
+  const cx = (nx + tx) / 2, cy = Math.min(ny, ty) - 18 - Math.abs(tx - nx) * 0.15;
+  const n = Math.max(12, Math.floor(Math.hypot(tx - nx, ty - ny) / 2));
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, u = 1 - t;
+    const px = u * u * nx + 2 * u * t * cx + t * t * tx, py = u * u * ny + 2 * u * t * cy + t * t * ty;
+    R(px, py, 2, 2, (i + Math.floor(T * 30)) % 3 ? '#6fc8ff' : '#ffffff');
+  }
+}
+function drawStrip() {
+  R(0, L.palY, W, H - L.palY, '#5aa84c');
+  R(0, L.palY, W, 2, '#4a9440');
+  for (let xx = 7; xx < W; xx += 23) { R(xx, L.palY + 5 + (xx % 3), 1, 2, '#7cc96a'); R(xx + 11, H - 4 - (xx % 2), 1, 2, '#7cc96a'); }
+}
+function button(b, bg, dark) {
+  const { x, y, s } = b;
+  R(x, y + 2, s, s, '#2f6b29');
+  R(x + 2, y - 2, s - 4, s + 4, '#ffffff'); R(x - 2, y + 2, s + 4, s - 4, '#ffffff'); R(x, y, s, s, '#ffffff');
+  R(x + 2, y, s - 4, s, bg); R(x, y + 2, s, s - 4, bg);
+  R(x + 2, y + s - 3, s - 4, 3, dark);
+}
+function drawHomeButton(b) {
+  button(b, '#2a6fe0', '#1a3f9a');
+  const cx = b.x + b.s / 2, s = b.s;
+  for (let k = 0; k < 6; k++) R(cx - 1 - k * 1.6, b.y + s * 0.22 + k * 1.6, 2 + k * 3.2, 2, '#e8222b');
+  R(cx - s * 0.28, b.y + s * 0.5, s * 0.56, s * 0.3, '#fff6e0');
+  R(cx - 2, b.y + s * 0.6, 4, s * 0.2, '#8a5a3a');
+}
+function drawAgainButton(b) {
+  const p = Math.round(Math.sin(T * 5) * 1.5);
+  const bb = { x: b.x - p, y: b.y - p, s: b.s + 2 * p };
+  button(bb, '#e8222b', '#a3121d');
+  flame(bb.x + bb.s / 2, bb.y + bb.s - 6, 1.6, 0);
+}
+function drawFireButton() {
+  if (F.state === 'mission') return;
+  const { x, y, r } = F.fireBtn, p = Math.round((Math.sin(T * 4) + 1) * 1.2);
+  circle(x, y + 2, r + 2, '#2f6b29');
+  circle(x, y, r + 2 + p, '#ffffff');
+  circle(x, y, r, '#e8222b');
+  flame(x, y + 9, 1.15, 1);
+}
+function drawWipe() {
+  if (!wipe) return;
+  const k = wipe.t < 0.35 ? wipe.t / 0.35 : 1 - (wipe.t - 0.35) / 0.35;
+  for (let y = 0, i = 0; y < H; y += 8, i++) {
+    const w = Math.ceil(W * Math.min(1, k * 1.15));
+    R(i % 2 ? W - w : 0, y, w, 8, '#1d1a2b');
+  }
 }
 
 /* ---------- loop ---------- */
@@ -730,6 +1028,9 @@ function frame(now) {
   last = now;
   draw();
   requestAnimationFrame(frame);
+}
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});   // offline play; not available in every viewer
 }
 new ResizeObserver(resize).observe(stage);
 resize();

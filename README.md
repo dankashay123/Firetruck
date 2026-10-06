@@ -5,6 +5,7 @@ A pixel-art toy for a toddler who loves fire trucks. One page, no build step, no
 ## How to play
 - **Tap a vehicle** (fire truck, police car, ambulance). It says its name, turns on its lights and siren, drives around the block and parks itself again. Tap it while it's driving to honk.
 - **Tap a paint pot** to repaint the vehicle with the yellow arrow over it. A recorded voice says the color name. Colors are remembered on the device.
+- **Tap the flame button** (top-left) for a fire call: the bell rings, the fire truck races to a burning house, and he drags or taps to spray water. Each window that goes out shows a waving neighbor or a kitty; when they're all out there's a celebration, then the pulsing flame button starts a new fire and the blue house button drives home.
 - Hidden surprises: the **bell** on the tower, the **dog**, the **fire hydrant**, the **sun** and the **helicopter**.
 
 There is no way to lose and nothing to read.
@@ -13,6 +14,9 @@ There is no way to lose and nothing to read.
 Open `index.html` in a browser, or serve the folder (`python3 -m http.server`) and open it on the phone or iPad on the same Wi-Fi. When it's hosted (e.g. GitHub Pages), use Safari's **Share → Add to Home Screen** to get a full-screen app icon.
 
 Tip: turn on **Guided Access** (Settings → Accessibility → Guided Access, then triple-click the side button in the game) so little hands can't leave the app.
+
+## Offline (planes, cars)
+`sw.js` caches everything on the first visit over Wi-Fi, so the home-screen app works in airplane mode. Bump `VERSION` in `sw.js` whenever files change. After an update, open the app once online, close it fully, and reopen to get the new version.
 
 ## Voice clips
 Recorded lines live in `audio/` as `<phrase>.mp3` (e.g. `fire-truck.mp3`, `red.mp3`) and are listed in `LINES` / `CLIP_NAMES` in `index.html`. Missing clips are simply skipped. To add new ones, trim and level them the same way:
