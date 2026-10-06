@@ -1271,9 +1271,10 @@
   }
 
   SCENES.flyer = {
-    view: [186, 200],
+    // phones held upright zoom in closer, so the busy streets fill the screen instead of empty sky
+    view: (dw, dh) => dh > dw * 1.7 ? [140, 260] : [186, 200],
     freeTouch: true,   // touch anywhere flies the helicopter; clouds don't change the weather
-    state: { cam, heli, people, laneA, homes, stars },   // read by the automated tests
+    state: { cam, heli, people, laneA, homes, stars, maxY: x => maxY(x) },   // read by the automated tests
     layout,
     groundY: () => clamp(GY - cam.y - 60, 40, 2000),
     enter() {
@@ -1281,8 +1282,12 @@
       if (!savedClouds) savedClouds = clouds;
       clouds = [];
       hold = null;
-      const sx = 2090, sy = GY - 150;
-      Object.assign(heli, { x: sx - W * 0.5 - 40, y: sy, vx: 120, vy: 0, dir: 1, tilt: 0, intro: 4, tx: sx, ty: sy });
+      // glide in from the right, just above the rooftops beside the fire station
+      const sx = 2150;
+      let roof = GY;
+      for (let x = sx - 20; x <= Math.round(sx + W * 0.5 + 60); x += 3) roof = Math.min(roof, maxY(x));
+      const sy = clamp(roof - 12, GY - 150, GY - 60);
+      Object.assign(heli, { x: sx + W * 0.5 + 40, y: sy, vx: -120, vy: 0, dir: -1, tilt: 0, intro: 4, tx: sx, ty: sy });
       cam.x = clamp(sx - W / 2, 0, WW - W); cam.y = clamp(sy - H * FRAME_Y, Math.min(0, WH - H), camMaxY());
       for (const h of homes) h.t = h === fireHome ? 6 : rand(0, 6);
       SFX.chop(); lastChop = T;

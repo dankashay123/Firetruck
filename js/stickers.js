@@ -361,7 +361,8 @@
     const lamps = []; for (let x = 30; x < W; x += 70) lamps.push(x);
     const g0 = roadY + roadH + 10, flowers = [];
     for (let i = 0; i < Math.round(W * Math.max(0, G.y1 - g0) / 700); i++) flowers.push({ x: r() * W | 0, y: g0 + (r() * (G.y1 - g0 - 4) | 0), c: ['#ff6fb4', '#ffffff', '#ffd21f'][r() * 3 | 0] });
-    return { bY, roadY, roadH, lamps, flowers, shops: shops(r, bY, 26, 64, ['#f2d16b', '#9ad0f5', '#f5a3c7', '#b6e3a1', '#f0b27a', '#c9b6f2', '#e8e1d0']) };
+    const low = buildLowPark(g0 - 4, G.y1, 5);
+    return { bY, roadY, roadH, lamps, low, flowers: low ? [] : flowers, shops: shops(r, bY, 26, 64, ['#f2d16b', '#9ad0f5', '#f5a3c7', '#b6e3a1', '#f0b27a', '#c9b6f2', '#e8e1d0']) };
   }
   function buildStation() {
     const sb = G.hy + Math.round((G.y1 - G.hy) * 0.32);
@@ -370,7 +371,13 @@
     sh = Math.min(sh, sb - sunCap(sx, sw) - 4);
     const n = sw >= 160 ? 3 : 2, dh = Math.round(sh * 0.6), dw = Math.floor((sw - 12 - (n - 1) * 6) / n);
     const tower = sb - sh - 22 >= sunCap(sx + 6, 18);
-    return { sb, sw, sx, sh, n, dh, dw, tower };
+    // on tall screens the driveway meets a street, with a little park on the other side
+    let road = null, low = null;
+    if (G.y1 - sb >= 110) {
+      road = { y: sb + Math.round((G.y1 - sb) * 0.24), h: clamp(Math.round((G.y1 - sb) * 0.18), 24, 34) };
+      low = buildLowPark(road.y + road.h + 6, G.y1, 9);
+    }
+    return { sb, sw, sx, sh, n, dh, dw, tower, road, low };
   }
   function buildPark() {
     const r = rng(23 + W), gh = G.y1 - G.hy;
@@ -387,8 +394,12 @@
       if (((x - pond.cx) / (pond.rx + 8)) ** 2 + ((y - pond.cy) / (pond.ry + 8)) ** 2 < 1) continue;
       flowers.push({ x, y, c: ['#ff6fb4', '#ffffff', '#ffd21f', '#c39bff'][r() * 4 | 0] });
     }
+    // a playground below the pond when the grass is tall
+    const playY = pond.cy + pond.ry + 34;
+    const play = G.y1 - playY >= 4 && gh >= 150 ? { y: Math.min(G.y1 - 4, playY + Math.round((G.y1 - playY) * 0.5)), x: Math.round(G.x0 + G.pw * 0.38) } : null;
+    if (play) for (let i = flowers.length - 1; i >= 0; i--) if (flowers[i].y > playY - 30 && flowers[i].y < play.y + 2 && flowers[i].x > play.x - 6) flowers.splice(i, 1);
     const pads = [[-0.45, -0.1], [0.3, 0.3], [0.5, -0.3]].map(([a, bb]) => ({ x: pond.cx + Math.round(a * pond.rx), y: pond.cy + Math.round(bb * pond.ry) }));
-    return { trees, pond, flowers, pads };
+    return { trees, pond, flowers, pads, play };
   }
   function buildCity() {
     const r = rng(37 + W), bY = G.hy + Math.round((G.y1 - G.hy) * 0.22);
@@ -409,6 +420,91 @@
     const roadY = bY + 6, roadH = clamp(Math.round((G.y1 - bY) * 0.4), 26, 60);
     const lamps = []; for (let x = 24; x < W; x += 60) lamps.push(x);
     return { bY, far, near, roadY, roadH, lamps };
+  }
+
+  /* ---------- extra scenery for the tall grass on portrait screens ---------- */
+  function slide(x, yb) {   // ladder on the left, slide down to the right (about 34 x 24)
+    R(x, yb - 22, 2, 22, '#e8222b'); R(x + 7, yb - 22, 2, 22, '#e8222b');
+    for (let y = yb - 19; y < yb; y += 4) R(x + 2, y, 5, 1, '#ffd21f');
+    R(x - 1, yb - 24, 11, 3, '#2a6fe0'); R(x - 1, yb - 30, 1, 6, '#2a6fe0'); R(x + 9, yb - 30, 1, 6, '#2a6fe0');
+    for (let k = 0; k < 20; k++) { R(x + 10 + k, yb - 22 + k, 3, 2, '#ffd21f'); R(x + 10 + k, yb - 20 + k, 3, 1, '#e0b010'); }
+    R(x + 29, yb - 3, 5, 2, '#ffd21f'); R(x + 18, yb - 13, 1, 13, '#e8222b');
+  }
+  function swings(x, yb) {   // a frame with two swinging seats (about 30 x 24)
+    R(x, yb - 24, 30, 2, '#2a6fe0');
+    for (const lx of [x, x + 28]) { R(lx, yb - 22, 2, 22, '#2a6fe0'); R(lx - 2, yb - 1, 6, 1, '#1d4fa8'); }
+    [['#e8222b', 8], ['#3fb43a', 20]].forEach(([c, sx], i) => {
+      const dx = Math.round(Math.sin(T * 2 + i * 2.2) * 3);
+      for (let k = 0; k < 15; k++) { const ox = Math.round(dx * k / 15); R(x + sx - 2 + ox, yb - 22 + k, 1, 1, '#3a3d46'); R(x + sx + 2 + ox, yb - 22 + k, 1, 1, '#3a3d46'); }
+      R(x + sx - 3 + dx, yb - 7, 7, 2, c);
+    });
+  }
+  function sandbox(x, yb, w = 26) {
+    R(x, yb - 9, w, 9, '#a8743f'); R(x + 2, yb - 7, w - 4, 6, '#f2d98a'); R(x + 3, yb - 6, 4, 1, '#fff0b8');
+    R(x + 6, yb - 6, 5, 4, '#e8222b'); R(x + 5, yb - 7, 7, 1, '#b31a22');   // a bucket
+    R(x + w - 9, yb - 5, 4, 2, '#2a6fe0'); R(x + w - 6, yb - 7, 1, 3, '#2a6fe0');   // and a spade
+  }
+  function bench(x, yb) {
+    R(x, yb - 8, 16, 2, '#a8743f'); R(x, yb - 5, 16, 2, '#8a5a2a');
+    R(x + 1, yb - 3, 2, 3, '#3a3d46'); R(x + 13, yb - 3, 2, 3, '#3a3d46');
+  }
+  function smallPond(cx, cy, rx, ry, duck = true) {
+    ellipse(cx, cy + 1, rx + 3, ry + 3, '#5aa84c');
+    ellipse(cx, cy, rx + 2, ry + 2, '#d9c48a');
+    ellipse(cx, cy, rx, ry, '#3f95d4');
+    ellipse(cx, cy + 1, Math.max(2, rx - 4), Math.max(1, ry - 3), '#5aaee6');
+    R(cx - (rx >> 1), cy - (ry >> 2), 6, 1, '#bfe6ff'); R(cx + 2, cy + (ry >> 2), 5, 1, '#bfe6ff');
+    if (duck) {
+      const dx = Math.round(Math.sin(T * 0.5) * rx * 0.45), dir = Math.cos(T * 0.5) >= 0 ? 1 : -1;
+      drawDuck(cx + dx, cy + 2, true, dir); drawDuck(cx + dx - dir * 9, cy + 3, false, dir);
+    }
+  }
+  function fountain(cx, yb) {
+    ellipse(cx, yb - 4, 22, 6, '#c9c4b8'); ellipse(cx, yb - 5, 19, 4, '#3f95d4'); ellipse(cx, yb - 5, 15, 2, '#5aaee6');
+    R(cx - 2, yb - 16, 4, 12, '#c9c4b8'); ellipse(cx, yb - 16, 7, 2, '#c9c4b8'); ellipse(cx, yb - 17, 5, 1, '#5aaee6');
+    for (let k = 0; k < 6; k++) {   // water arcs, sparkling as they fall
+      const side = k % 2 ? 1 : -1, ph = (T * 1.6 + k * 0.33) % 1, d = 4 + ph * 12;
+      R(cx + side * Math.round(d) - 1, yb - 18 - Math.round(Math.sin(ph * Math.PI) * 6) + Math.round(ph * 10), 2, 2, k % 3 ? '#bfe6ff' : '#ffffff');
+    }
+    R(cx - 1, yb - 23 + (Math.floor(T * 8) % 2), 2, 5, '#bfe6ff');
+  }
+  function planter(x, yb, r) { R(x - 6, yb - 6, 12, 6, '#a8743f'); R(x - 5, yb - 5, 10, 1, '#c98a4b'); drawTree(x, yb - 5, r); }
+  function flowerBits(list) { for (const f of list) { R(f.x, f.y, 3, 1, f.c); R(f.x + 1, f.y - 1, 1, 3, f.c); R(f.x + 1, f.y, 1, 1, '#ffd21f'); } }
+
+  // A little park for an empty strip of grass: a footpath, a playground, a pond and a bench.
+  function buildLowPark(y0, y1, seed) {
+    const h = y1 - y0;
+    if (h < 46) return null;
+    const r = rng(seed + W), x0 = G.x0, x1 = G.x1, pw = x1 - x0;
+    const pathX = Math.round(x0 + pw * 0.5);
+    const big = h >= 84;
+    const play = { slideX: Math.round(x0 + pw * 0.06), slideY: Math.round(y0 + (big ? h * 0.42 : h * 0.62)), swingX: Math.round(pathX - 40), swingY: Math.round(y0 + h * 0.9), sandX: Math.round(x0 + pw * 0.05) };
+    const pond = { cx: Math.round(x0 + pw * 0.76), cy: Math.round(y0 + h * (big ? 0.38 : 0.5)), rx: Math.round(clamp(pw * 0.17, 18, 60)), ry: Math.round(clamp(h * 0.14, 7, 18)) };
+    const flowers = [];
+    for (let i = 0; i < Math.round(pw * h / 450); i++) {
+      const x = x0 + (r() * pw | 0), y = y0 + 4 + (r() * (h - 6) | 0);
+      if (Math.abs(x - pathX) < 12) continue;
+      if (((x - pond.cx) / (pond.rx + 7)) ** 2 + ((y - pond.cy) / (pond.ry + 7)) ** 2 < 1) continue;
+      flowers.push({ x, y, c: ['#ff6fb4', '#ffffff', '#ffd21f', '#c39bff'][r() * 4 | 0] });
+    }
+    return { y0, y1, h, big, pathX, play, pond, flowers, benchX: pathX + 10, benchY: Math.round(y0 + h * (big ? 0.82 : 0.9)), treeX: Math.round(x1 - pw * 0.08) };
+  }
+  function drawLowPark(p) {
+    if (!p) return;
+    // footpath winding down from the top, with a loop out to the pond
+    for (let y = p.y0; y < p.y1; y++) {
+      const k = (y - p.y0) / p.h, w = 8 + Math.round(k * 6), x = p.pathX + Math.round(Math.sin(k * 3.2) * 6);
+      R(x - (w >> 1), y, w, 1, '#e4cf96');
+    }
+    const py = p.pond.cy + p.pond.ry + 6;
+    if (py < p.y1 - 3) R(p.pathX, py, p.pond.cx - p.pathX, 5, '#e4cf96');
+    flowerBits(p.flowers);
+    smallPond(p.pond.cx, p.pond.cy, p.pond.rx, p.pond.ry);
+    slide(p.play.slideX, p.play.slideY);
+    if (p.big) { swings(p.play.swingX, p.play.swingY); sandbox(p.play.sandX, Math.min(p.y1 - 2, p.play.swingY)); }
+    else sandbox(p.play.slideX + 40, p.play.slideY);
+    bench(p.benchX, p.benchY);
+    if (p.big) drawTree(p.treeX, Math.min(p.y1 - 1, p.benchY + 4), 10);
   }
 
   function backHills(y, c = '#8fd877') {
@@ -445,15 +541,24 @@
     R(0, w2, W, 6, '#d8d2c4'); R(0, w2 + 5, W, 1, '#b5ae9f');
     R(0, w2 + 6, W, H - w2 - 6, '#6cbf5a');
     for (let x = 8; x < W; x += 26) R(x, w2 + 12 + (x % 7), 2, 2, '#7cc96a');
-    for (const f of q.flowers) { R(f.x, f.y, 3, 1, f.c); R(f.x + 1, f.y - 1, 1, 3, f.c); R(f.x + 1, f.y, 1, 1, '#ffd21f'); }
+    flowerBits(q.flowers);
+    drawLowPark(q.low);
   }
   function drawStation(q) {
     backHills(G.hy - 20);
     R(0, G.hy, W, H - G.hy, '#6cbf5a');
     const { sb, sw, sx, sh, n, dh, dw } = q, top = sb - sh, cx = sx + (sw >> 1);
     // driveway
-    for (let y = sb; y < G.y1; y++) { const e = Math.round((y - sb) * 0.35); R(sx - e, y, sw + 2 * e, 1, '#c9c4b8'); }
-    for (let i = 0; i < n; i++) { const dx = sx + 6 + i * (dw + 6) + (dw >> 1); R(dx, sb + 4, 1, G.y1 - sb - 4, '#b3ad9f'); }
+    const dEnd = q.road ? q.road.y : G.y1;
+    for (let y = sb; y < dEnd; y++) { const e = Math.round((y - sb) * 0.35); R(sx - e, y, sw + 2 * e, 1, '#c9c4b8'); }
+    for (let i = 0; i < n; i++) { const dx = sx + 6 + i * (dw + 6) + (dw >> 1); R(dx, sb + 4, 1, dEnd - sb - 4, '#b3ad9f'); }
+    if (q.road) {
+      road(q.road.y, q.road.h);
+      const w2 = q.road.y + q.road.h;
+      R(0, w2, W, 6, '#d8d2c4'); R(0, w2 + 5, W, 1, '#b5ae9f');
+      bmp(sx + sw + 8, w2 - 10, HYDRANT, { a: '#e8222b', b: '#a3121d', c: '#ff7a6b', d: '#7a1018', y: '#ffd21f' });
+      drawLowPark(q.low);
+    }
     for (const tx of [sx - 26, sx + sw + 26]) if (tx > -10 && tx < W + 10) drawTree(tx, sb, 11);
     if (q.tower) {
       R(sx + 6, top - 22, 20, 22, '#c0503a'); R(sx + 4, top - 26, 24, 4, '#7a2f24');
@@ -498,6 +603,13 @@
     for (const lp of q.pads) { ellipse(lp.x, lp.y, 4, 2, '#3fb43a'); R(lp.x, lp.y - 2, 2, 2, '#1f7a2a'); }
     R(q.pads[1].x - 1, q.pads[1].y - 2, 2, 2, '#ffb3da');
     for (let i = 0; i < 4; i++) { const rx = p.cx - p.rx - 2 + i * 3; R(rx, p.cy - 10 + (i % 2) * 2, 1, 10, '#3f7a2a'); R(rx, p.cy - 12 + (i % 2) * 2, 1, 3, '#8a5a2a'); }
+    if (q.play) {
+      const { x, y } = q.play;
+      R(x - 4, y - 30, Math.min(W - x, 112), 32, '#d9b97a'); R(x - 3, y - 29, Math.min(W - x, 112) - 2, 30, '#ecd49a');   // soft sand under the playground
+      slide(x, y - 1); swings(x + 42, y - 1); sandbox(x + 78, y - 1, 24);
+      bench(Math.round(G.x0 + G.pw * 0.04), Math.round(p.cy + p.ry + 18));
+      drawDuck(p.cx + p.rx * 0.2 + Math.sin(T * 0.4) * p.rx * 0.4, p.cy + 1, true, Math.cos(T * 0.4) >= 0 ? 1 : -1);
+    }
   }
   function drawCity(q) {
     R(0, G.hy, W, H - G.hy, '#6a7090');
@@ -514,6 +626,15 @@
     R(0, w2, W, H - w2, '#9a96a8');
     for (let y = w2 + 6; y < G.y1; y += 8) R(0, y, W, 1, '#8a8698');
     for (let x = 6; x < W; x += 14) R(x, w2 + 1, 1, G.y1 - w2, '#8a8698');
+    const ph = G.y1 - w2;
+    if (ph >= 50) {   // a plaza with a fountain, benches and planters
+      const fy = w2 + Math.round(ph * (ph >= 90 ? 0.55 : 0.75)), cx = Math.round(W / 2);
+      ellipse(cx, fy - 4, 30, 10, '#b5b0c4');
+      fountain(cx, fy);
+      bench(cx - 50, fy - 2); bench(cx + 34, fy - 2);
+      for (const px of [cx - 70, cx + 70]) if (px > 8 && px < W - 8) planter(px, fy + (ph >= 90 ? 24 : 2), 8);
+      if (ph >= 90) for (const px of [cx - 36, cx + 36]) planter(px, w2 + 26, 7);
+    }
   }
   const BG = [drawStreet, drawStation, drawPark, drawCity];
 

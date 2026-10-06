@@ -6,6 +6,7 @@
   const dog = { jump: 0 }, bell = { swing: 0 }, hydrant = { spray: 0 };
   const doors = [0, 0, 0];            // garage door closed amount, 0 open .. 1 closed
   const bed = { on: false, asleep: false, lullaby: 0, sung: 0 };
+  const menu = { open: false, k: 0, x: 0, y: 0, r: 18 };   // the launcher menu and how far it has opened (0..1)
   let selected = VI.fire, paintCount = 0, bCache = null, potCache = null;
   let crew = [], seats = [], btns = [], pots = [];
 
@@ -36,13 +37,14 @@
     B.dogX = B.x - 19;
     B.hydX = B.x + B.w + 6;
     furnish();
-    // mini-game launchers: two short columns beside the station when it fits, else a row on top
-    // mini-game launchers: a 3x3 block beside the station when it fits, else two rows of four on top
+    // mini-game launchers: one big menu button that opens into a grid of the rest
     const kinds = ['fire', 'amb', 'police', 'help', 'wash', 'chopper', 'stickers', 'movies', 'drive', 'bed'];
     const side = B.x - L.safeL >= 100 && B.top - L.safeT < 120;
-    btns = kinds.map((k, i) => side
-      ? { k, x: L.safeL + 20 + (i % 3) * 32, y: L.safeT + 22 + Math.floor(i / 3) * 32, r: 13 }
-      : { k, x: L.safeL + 24 + (i % 5) * 38, y: L.safeT + 30 + Math.floor(i / 5) * 38, r: 16 });
+    const sp = side ? 32 : 38, r = side ? 13 : 16;
+    const cols = side ? 3 : Math.max(3, Math.min(6, Math.floor((W - L.safeR - L.safeL - 8) / sp)));
+    const ox = L.safeL + (side ? 20 : 24), oy = L.safeT + (side ? 22 : 30);
+    menu.x = ox; menu.y = oy; menu.r = r + (side ? 2 : 4);
+    btns = kinds.map((k, i) => ({ k, x: ox + ((i + 1) % cols) * sp, y: oy + Math.floor((i + 1) / cols) * sp, r }));
     const twoCol = side;
     B.leftTree = !twoCol && B.x - L.safeL >= 64;
     B.rightTree = W - L.safeR - (B.x + B.w) >= 64;
@@ -211,6 +213,7 @@
 
   /* ---------- missions & bedtime ---------- */
   function launch(k) {
+    menu.open = false;
     if (k === 'bed') { bed.on ? wakeUp() : bedtime(); return; }
     if (bed.on) return;
     if (!SCENES[k]) return;   // that mini-game isn't installed
@@ -253,6 +256,7 @@
 
   /* ---------- update ---------- */
   function update(dt) {
+    menu.k += Math.sign((menu.open ? 1 : 0) - menu.k) * Math.min(Math.abs((menu.open ? 1 : 0) - menu.k), dt * 4);
     updateVehicles(dt);
     updateCrew(dt);
     updateBedtime(dt);
@@ -271,8 +275,13 @@
 
   /* ---------- tap ---------- */
   function tap(x, y) {
-    for (const b of btns) {
-      if ((bed.on && b.k !== 'bed') || (pendingMission && b.k !== 'bed')) continue;
+    if ((x - menu.x) ** 2 + (y - menu.y) ** 2 <= (menu.r + 6) ** 2) {
+      if (bed.on) launch('bed');   // in bedtime the menu button is the sun that wakes everyone up
+      else if (!pendingMission) { menu.open = !menu.open; menu.open ? [523, 784].forEach((f, i) => tone('sine', f, i * 0.06, 0.15, 0.12)) : [784, 523].forEach((f, i) => tone('sine', f, i * 0.06, 0.15, 0.1)); }
+      return true;
+    }
+    if (menu.open && menu.k > 0.6) for (const b of btns) {
+      if (!btnShown(b)) continue;
       if ((x - b.x) ** 2 + (y - b.y) ** 2 <= (b.r + 6) ** 2) { launch(b.k); return true; }
     }
     const r = L.blob / 2 + 4;
@@ -626,18 +635,43 @@
       text('Z', x + 3, y + 1, 1, '#ffffff'); text('Z', x + 7, y - 5, 1, '#ffffff');
     },
   };
-  function drawButtons() {
-    for (const b of btns) {
-      const hidden = (bed.on && b.k !== 'bed') || (pendingMission && b.k !== 'bed') || (b.k !== 'bed' && !SCENES[b.k]) || (b.k === 'movies' && !['movieFire', 'moviePolice', 'movieAmb'].some(m => SCENES[m]));
-      if (hidden) continue;
-      if (b.k === 'bed' && bed.on) { roundButton(b.x, b.y, b.r, '#ffd21f', true); drawSun0(b.x, b.y); continue; }
-      ICONS[b.k](b.x, b.y, b.r);
+  function btnShown(b) {
+    if (b.k === 'bed') return true;
+    if (!SCENES[b.k]) return false;
+    return b.k !== 'movies' || ['movieFire', 'moviePolice', 'movieAmb'].some(m => SCENES[m]);
+  }
+  function drawMenuButton() {
+    const { x, y, r } = menu;
+    if (bed.on) { roundButton(x, y, r, '#ffd21f', true); drawSun0(x, y); return; }
+    roundButton(x, y, r, menu.open ? '#ffffff' : '#ffd21f', !menu.open);
+    // four toy squares: red, blue, white and green, spreading apart as the menu opens
+    const d = Math.round(r * 0.12 + 1 + menu.k * 1.5), s = Math.max(5, Math.round(r * 0.36));
+    const sq = [['#e8222b', -1, -1], ['#2a6fe0', 1, -1], ['#3fb43a', -1, 1], ['#f57a12', 1, 1]];
+    for (const [c, sx, sy] of sq) {
+      const cx = x + sx * d - (sx < 0 ? s : 0), cy = y + sy * d - (sy < 0 ? s : 0);
+      R(cx, cy + 1, s, s, '#2f3240'); R(cx, cy, s, s, c); R(cx + 1, cy + 1, 2, 1, '#ffffff');
     }
+  }
+  function drawButtons() {
+    if (pendingMission) menu.open = false;
+    if (menu.k > 0.02 && !bed.on && !pendingMission) {
+      const e = 1 - (1 - menu.k) ** 3;   // ease out
+      let n = 0;
+      for (const b of btns) {
+        if (!btnShown(b)) continue;
+        const k = Math.max(0, Math.min(1, e * 1.4 - n++ * 0.04));
+        if (k <= 0) continue;
+        const bx = Math.round(menu.x + (b.x - menu.x) * k), by = Math.round(menu.y + (b.y - menu.y) * k);
+        if (k < 1) alpha(k, () => ICONS[b.k](bx, by, b.r)); else ICONS[b.k](bx, by, b.r);
+      }
+    }
+    drawMenuButton();
   }
   function drawSun0(x, y) { circle(x, y, 7, '#ff9a3a'); for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; R(x + Math.cos(a) * 10 - 1, y + Math.sin(a) * 10 - 1, 2, 2, '#ff9a3a'); } }
 
   /* ---------- scene ---------- */
   SCENES.station = {
+    menu,   // read by the automated tests
     layout,
     groundY: () => L.hillY,
     enter(arg) {

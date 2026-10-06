@@ -860,7 +860,9 @@ function resize() {
   dpr = window.devicePixelRatio || 1;
   const dw = Math.round(stage.clientWidth * dpr), dh = Math.round(stage.clientHeight * dpr);
   const [it, ir, ib, il] = readInsets().map(v => v * dpr);
-  const [vw, vh] = (SCENES[scene] && SCENES[scene].view) || [300, 250];   // smallest view the scene needs
+  let v = (SCENES[scene] && SCENES[scene].view) || [300, 250];   // smallest view the scene needs
+  if (typeof v === 'function') v = v(dw - il - ir, dh - it - ib);
+  const [vw, vh] = v;
   S = Math.max(1, Math.floor(Math.min((dw - il - ir) / vw, (dh - it - ib) / vh)));
   W = Math.ceil(dw / S); H = Math.ceil(dh / S);
   L.safeT = Math.ceil(it / S); L.safeR = Math.ceil(ir / S); L.safeB = Math.ceil(ib / S); L.safeL = Math.ceil(il / S);
