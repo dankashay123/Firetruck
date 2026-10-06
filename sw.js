@@ -1,6 +1,6 @@
 // Offline support: everything the game needs is cached on first visit.
 // Bump VERSION whenever any file changes so devices pick up the update.
-const VERSION = 'fire-station-v21';
+const VERSION = 'fire-station-v22';
 const FILES = [
   './',
   './index.html',
@@ -18,6 +18,7 @@ const FILES = [
   './js/movie_amb.js',
   './js/movies.js',
   './js/flyer.js',
+  './js/drive.js',
   './js/main.js',
   './manifest.webmanifest',
   './icon-180.png',
