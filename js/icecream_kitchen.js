@@ -14,7 +14,7 @@
   const SWIRLS = [['#ff8fb8', '#e8608f', '#ffc2da'], ['#fff6e0', '#e8d8b8', '#ffffff'], ['#8a5230', '#6a3a1e', '#b07a50'], ['#7ad0ff', '#4aa8e8', '#c4ecff']];
   const SCOOPS = [['#ff8fb8', '#e8608f', '#ffc2da'], ['#8a5230', '#6a3a1e', '#b07a50'], ['#fff6e0', '#e8d8b8', '#ffffff'], ['#9ef0c8', '#6ad4a4', '#d4fff0'], ['#b48ae8', '#8a5ad0', '#dcc8ff'], ['#ffb060', '#f08a30', '#ffd6a8']];
   const TOPS = ['sprinkles', 'sauce', 'whip', 'stars', 'cherry'];
-  const SWIRL_H = 30;   // art pixels of soft serve when the swirl is full
+  const SWIRL_H = 28;   // art pixels of soft serve when the swirl is full
 
   /* ---------- the treat being built ---------- */
   const B = { box: 'cone', scoops: [], segs: [], amount: 0, tops: {}, sprinkles: [], stars: [] };
@@ -22,80 +22,104 @@
     Object.assign(B, { box: ['cone', 'waffle', 'cup'][Math.floor(Math.random() * 3)], scoops: [], segs: [], amount: 0, tops: {}, sprinkles: [], stars: [] });
   }
   const built = () => B.scoops.length > 0 || B.amount > 0.15;
-  const boxTop = () => B.box === 'cup' ? { y: -12, w: 18 } : B.box === 'waffle' ? { y: -22, w: 18 } : { y: -20, w: 15 };
-  const scoopY = i => boxTop().y - 4 - i * 9;   // center of scoop i
-  function swirlBase() {
+  // the container's opening: y of the rim and its width (art pixels, 0 = the counter)
+  const boxTop = () => B.box === 'cup' ? { y: -15, w: 20 } : B.box === 'waffle' ? { y: -24, w: 20 } : { y: -22, w: 16 };
+  const SR = 8;   // scoop radius
+  const scoopX = i => (i % 2 ? 1 : -1) * (i ? 1 : 0);
+  const scoopY = i => boxTop().y - 4 - i * 11;   // center of scoop i (the first one sits down in the rim)
+  function swirlBase() {   // where the soft serve starts, and how wide
     const t = boxTop();
-    return B.scoops.length ? { y: scoopY(B.scoops.length - 1) - 4, w: 13 } : { y: t.y + 1, w: t.w + 1 };
+    return B.scoops.length ? { y: scoopY(B.scoops.length - 1) - 4, w: 18 } : { y: t.y + 3, w: t.w + 6 };   // overhangs the rim a little
   }
-  function topSurface() {   // where toppings land: [y, half width]
-    const s = swirlBase();
-    if (B.amount > 0.05) { const h = Math.min(B.amount, 1) * SWIRL_H; return [s.y - h, Math.max(3, s.w * (1 - h / (SWIRL_H * 1.25)) / 2)]; }
-    if (B.scoops.length) return [scoopY(B.scoops.length - 1) - 6, 5];
-    const t = boxTop(); return [t.y, t.w / 2 - 1];
+  const swirlH = () => Math.min(B.amount, 1) * SWIRL_H;
+  const RING = 7, RINGS = [1, 0.8, 0.58, 0.36, 0.2];
+  function swirlW(h) {   // full width of the soft serve h pixels above its base: fat ridged rings, each a step narrower
+    const s = swirlBase(), i = Math.min(RINGS.length - 1, Math.floor(h / RING)), t = (h % RING) / RING;
+    const w0 = RINGS[i], w1 = RINGS[Math.min(RINGS.length - 1, i + 1)];
+    const bulge = 0.88 + 0.12 * Math.sin(Math.min(1, t * 1.25) * Math.PI);   // each ring is rounded
+    return Math.max(2, Math.round(s.w * lerp(w0, (w0 + w1) / 2, t * t) * bulge));
   }
+  // the top of the treat: apex y and half width at any y, for draping toppings over it
+  function topShape() {
+    if (B.amount > 0.05) { const s = swirlBase(), h = swirlH(); return { apex: s.y - h, hw: y => { const hh = s.y - y; return hh < 0 || hh > h ? 0 : swirlW(hh) / 2; } }; }
+    if (B.scoops.length) { const i = B.scoops.length - 1, cy = scoopY(i), cx = scoopX(i); return { apex: cy - SR, cx, hw: y => Math.sqrt(Math.max(0, SR * SR - (y - cy) ** 2)) }; }
+    const t = boxTop(); return { apex: t.y, hw: () => t.w / 2 - 1 };
+  }
+  function topSurface() { const ts = topShape(); return [ts.apex + 3, Math.max(3, ts.hw(ts.apex + 3))]; }
 
   /* ---------- drawing the treat (art pixels; caller scales) ---------- */
-  function drawBox() {
+  function boxBack() {   // everything but the front lip
     if (B.box === 'cup') {
-      for (let r = 0; r < 12; r++) { const w = 14 + Math.round(r * 0.34) * 1; R(-w / 2, -1 - r, w, 1, r % 4 < 2 ? '#ff8fb8' : '#ffffff'); }
-      R(-9, -13, 18, 2, '#ffd0e4'); R(-9, -13, 18, 1, '#ffffff'); R(-6, -9, 1, 6, '#ffffff');
+      for (let r = 0; r < 15; r++) {
+        const w = Math.round(14 + r * 6 / 14), x0 = -Math.floor(w / 2), y = -1 - r;
+        R(x0, y, w, 1, '#ffffff');
+        for (let sx = x0 + 1; sx < x0 + w - 1; sx += 4) R(sx, y, 2, 1, '#ff8fb8');
+        R(x0 + w - 2, y, 2, 1, '#e8b8cc');
+      }
+      R(-10, -16, 20, 1, '#c84a7a');   // the dark inside of the cup's opening
       return;
     }
-    const top = B.box === 'waffle' ? 20 : 18, w0 = B.box === 'waffle' ? 16 : 14;
+    const waffle = B.box === 'waffle', top = waffle ? 22 : 20, w0 = waffle ? 18 : 15;
     for (let r = 0; r < top; r++) {
-      const w = Math.max(2, Math.round(w0 - r * (w0 - 2) / top)), y = -top + r;
-      R(-w / 2, y, w, 1, '#d9a35a');
-      for (let x = -w / 2 + ((r * 3) % 4); x < w / 2 - 1; x += 4) R(x, y, 1, 1, '#b07a34');
+      const w = Math.max(2, Math.round(w0 - r * (w0 - 2) / top)), x0 = -Math.floor(w / 2), y = -top + r;
+      R(x0, y, w, 1, '#dcaa62');
+      for (let x = x0; x < x0 + w; x++) if ((x + r) % 4 === 0 || (x - r + 40) % 4 === 0) R(x, y, 1, 1, '#b07a34');   // the waffle diamonds
+      R(x0 + w - 1, y, 1, 1, '#a06a2a');
     }
-    if (B.box === 'waffle') { R(-10, -22, 20, 3, '#e8b870'); R(-10, -22, 20, 1, '#f4d090'); for (let x = -9; x < 10; x += 3) R(x, -20, 1, 1, '#b07a34'); }
-    else { R(-8, -20, 16, 2, '#e8b870'); R(-8, -20, 16, 1, '#f4d090'); }
-    R(-1, -1, 2, 1, '#b07a34');
+  }
+  function boxFront() {   // the rim, drawn over the bottom of the ice cream so it sits inside
+    if (B.box === 'cup') { R(-11, -16, 22, 2, '#ffffff'); R(-11, -14, 22, 1, '#e8d8e0'); for (let x = -10; x < 11; x += 4) R(x, -16, 2, 1, '#ffd0e4'); return; }
+    if (B.box === 'waffle') { R(-11, -25, 22, 4, '#eec07a'); R(-11, -25, 22, 1, '#f8dca0'); R(-11, -21, 22, 1, '#b07a34'); for (let x = -10; x < 11; x += 3) R(x, -23, 1, 1, '#c88a40'); return; }
+    R(-9, -23, 18, 3, '#eec07a'); R(-9, -23, 18, 1, '#f8dca0'); R(-9, -20, 18, 1, '#b07a34');
   }
   function drawScoop(c, cx, cy) {
-    circle(cx, cy, 6, c[0]);
-    for (let x = -6; x <= 6; x += 3) circle(cx + x, cy + 4, 2, c[0]);   // the drippy bottom edge
-    R(cx - 6, cy + 5, 13, 1, c[1]); R(cx - 4, cy + 3, 9, 1, c[1]);
-    R(cx - 3, cy - 4, 3, 2, c[2]); R(cx - 4, cy - 2, 1, 2, c[2]);
+    circle(cx + 1, cy + 1, SR, c[1]);                  // shade toward the bottom right
+    circle(cx, cy, SR - 1, c[0]); R(cx - SR, cy - 1, 2 * SR, 3, c[0]);
+    for (let x = -SR; x <= SR; x += 4) { circle(cx + x, cy + 6, 2, c[0]); R(cx + x - 1, cy + 8, 3, 1, c[1]); }   // the drippy lip
+    R(cx - 4, cy - 5, 3, 2, c[2]); R(cx - 5, cy - 3, 2, 2, c[2]); R(cx - 2, cy - 6, 2, 1, '#ffffff');
   }
   function drawSwirl() {
     if (B.amount <= 0) return;
     const s = swirlBase(), full = Math.min(B.amount, 1.15) * SWIRL_H;
     let segI = 0;
-    for (let y = 0; y < full; y++) {
-      const a = y / SWIRL_H;
+    for (let h = 0; h < full; h++) {
+      const a = h / SWIRL_H;
       while (segI < B.segs.length - 1 && B.segs[segI + 1].a0 <= a) segI++;
-      const c = SWIRLS[B.segs[segI] ? B.segs[segI].f : 0], ridge = y % 6;
-      let w = s.w * Math.max(0.12, 1 - (y / (SWIRL_H * 1.25)) ** 1.25);
-      w += ridge < 2 ? -1 : ridge < 4 ? 1 : 0;
-      const off = Math.round(Math.sin(y * 0.52) * 1.2), yy = s.y - y;
-      R(Math.round(-w / 2) + off, yy, Math.round(w), 1, ridge === 0 ? c[1] : c[0]);
-      if (ridge === 3) R(Math.round(-w / 2) + off + 1, yy, Math.max(1, Math.round(w * 0.3)), 1, c[2]);
+      const c = SWIRLS[B.segs[segI] ? B.segs[segI].f : 0], t = h % 7, w = swirlW(h), x0 = -Math.floor(w / 2), y = s.y - h;
+      R(x0, y, w, 1, c[0]);
+      if (t === 0) { R(x0, y, Math.ceil(w / 2), 1, c[1]); R(x0 + Math.ceil(w / 2), y - 1, Math.floor(w / 2), 1, c[1]); }   // a slanted crease makes it spiral
+      if (t === 3 || t === 4) R(x0 + 1, y, Math.max(1, Math.round(w * 0.25)), 1, c[2]);
+      R(x0 + w - 1, y, 1, 1, c[1]);
     }
-    if (B.amount >= 1) {   // the little curl on top
+    if (B.amount >= 1) {   // the curl on top
       const c = SWIRLS[B.segs.length ? B.segs[B.segs.length - 1].f : 0], ty = s.y - full;
-      R(-1, ty - 2, 3, 2, c[0]); R(1, ty - 3, 2, 1, c[0]); R(2, ty - 4, 1, 1, c[1]);
+      R(-1, ty - 1, 3, 2, c[0]); R(0, ty - 3, 3, 2, c[0]); R(2, ty - 4, 2, 1, c[0]); R(3, ty - 5, 1, 1, c[1]); R(0, ty - 2, 1, 1, c[2]);
     }
   }
   function drawToppings() {
-    const [ty, hw] = topSurface();
-    if (B.tops.sauce) {
-      R(-hw, ty, hw * 2, 3, '#6a3a1e'); R(-hw + 1, ty - 1, hw * 2 - 2, 1, '#6a3a1e');
-      for (let i = 0; i < 4; i++) { const x = Math.round(-hw + 1 + i * (hw * 2 - 2) / 3), d = 3 + ((i * 5) % 4); R(x, ty + 2, 1, d, '#6a3a1e'); R(x, ty + 2 + d, 1, 1, '#4a2410'); }
-      R(-hw + 2, ty, 2, 1, '#9a6a40');
+    const ts = topShape(), ap = ts.apex, cx = ts.cx || 0;
+    if (B.tops.sauce) {   // chocolate draped over the top, dripping down the sides
+      for (let y = ap; y < ap + 7; y++) { const hw = Math.max(2, Math.round(ts.hw(y) + 0.5)); R(cx - hw, y, hw * 2, 1, '#6a3a1e'); }
+      const hw = Math.max(2, ts.hw(ap + 6));
+      for (const [f, d] of [[-0.85, 4], [-0.35, 2], [0.2, 5], [0.7, 3]]) { const x = Math.round(cx + f * hw); R(x, ap + 7, 1, d, '#6a3a1e'); R(x, ap + 7 + d, 1, 1, '#4a2410'); }
+      R(cx - 2, ap + 1, 2, 1, '#9a6a40');
     }
-    if (B.tops.whip) { R(-4, ty - 3, 9, 3, '#ffffff'); R(-3, ty - 5, 7, 2, '#ffffff'); R(-1, ty - 7, 3, 2, '#ffffff'); R(-4, ty - 1, 9, 1, '#e8e0e8'); }
-    const wy = ty - (B.tops.whip ? 6 : 0);
-    for (const p of B.sprinkles) R(Math.round(p.u * hw), Math.round(ty + 1 + p.v * 4), p.h ? 2 : 1, p.h ? 1 : 2, p.c);
-    for (const p of B.stars) { const x = Math.round(p.u * hw), y = Math.round(ty + 1 + p.v * 3); R(x - 1, y, 3, 1, p.c); R(x, y - 1, 1, 3, p.c); }
-    if (B.tops.cherry) { R(-1, wy - 5, 4, 4, '#e8222b'); R(-2, wy - 4, 6, 2, '#e8222b'); R(0, wy - 5, 1, 1, '#ff8a8a'); R(1, wy - 8, 1, 3, '#3a8a2e'); R(2, wy - 9, 2, 1, '#3a8a2e'); }
+    for (const p of B.sprinkles) { const y = Math.round(ap + 2 + p.v * 5), x = Math.round(cx + p.u * ts.hw(y) * 0.85); R(x, y, p.h ? 2 : 1, p.h ? 1 : 2, p.c); }
+    for (const p of B.stars) { const y = Math.round(ap + 2 + p.v * 5), x = Math.round(cx + p.u * ts.hw(y) * 0.8); R(x - 1, y, 3, 1, p.c); R(x, y - 1, 1, 3, p.c); }
+    let top = ap;
+    if (B.tops.whip) {   // a dollop of whipped cream
+      R(cx - 4, ap - 2, 9, 3, '#ffffff'); R(cx - 3, ap - 4, 7, 2, '#ffffff'); R(cx - 2, ap - 6, 5, 2, '#ffffff'); R(cx, ap - 8, 2, 2, '#ffffff');
+      R(cx - 4, ap, 9, 1, '#dcd4e0'); R(cx + 2, ap - 4, 2, 2, '#ece6f0'); top = ap - 7;
+    }
+    if (B.tops.cherry) { R(cx - 2, top - 4, 5, 4, '#e8222b'); R(cx - 1, top - 5, 3, 6, '#e8222b'); R(cx - 1, top - 4, 1, 1, '#ff9a9a'); R(cx + 1, top - 8, 1, 3, '#3a8a2e'); R(cx + 2, top - 9, 2, 1, '#3a8a2e'); }
   }
   function drawTreat(x, yb, k, wob = 0) {
     g.save(); g.translate(Math.round(x), Math.round(yb)); g.scale(k, k);
     if (wob) g.rotate(wob);
-    drawBox();
-    B.scoops.forEach((c, i) => drawScoop(SCOOPS[c], 0, scoopY(i)));
+    boxBack();
+    B.scoops.forEach((c, i) => drawScoop(SCOOPS[c], scoopX(i), scoopY(i)));
     drawSwirl();
+    boxFront();
     drawToppings();
     g.restore();
   }
@@ -116,24 +140,28 @@
       : { t, x: Math.round(lerp(L.safeL + r + 8, W - L.safeR - r - 8, i / 4)), y: H - L.safeB - r - 8, r });
     const rx0 = L.safeL + 4, rx1 = wide ? W - L.safeR - 2 * r - 16 : W - L.safeR - 4;
     Y.row = { x0: rx0, x1: rx1, y: L.safeT + s + 12 };
-    const mw = Math.min(54, Math.floor((rx1 - rx0) / 4));
-    Y.mach = SWIRLS.map((_, i) => ({ i, x: Math.round(lerp(rx0, rx1 - mw, i / 3)), y: Y.row.y, w: mw - 4, h: Math.min(50, Math.round(mw * 1.05)) }));
+    // the machines sit on a sliding shelf: the chosen one glides over the treat, which stays in the middle
+    const mw = Math.max(40, Math.min(58, Math.floor((rx1 - rx0) / (wide ? 4 : 3.2))));
+    Y.mw = mw;
+    Y.mach = SWIRLS.map((_, i) => ({ i, bx: i * mw, x: 0, y: Y.row.y, w: mw - 6, h: Math.min(54, Math.round(mw * 1.0)) }));
     const tw = Math.min(40, Math.floor((rx1 - rx0) / 6));
     Y.tubs = SCOOPS.map((_, i) => ({ i, x: Math.round(lerp(rx0, rx1 - tw, i / 5)), y: Y.row.y + 6, w: tw - 3, h: Math.round(tw * 0.75) }));
     // the treat sits on the counter
     Y.yb = wide ? H - L.safeB - 6 : Y.tops[0].y - r - 12;
     const room = Y.yb - (Y.row.y + Y.mach[0].h + 8);
-    Y.k = Math.max(1, Math.min(4, Math.floor(room / 52), Math.floor((Y.wide ? (W - L.safeR - L.safeL) * 0.4 : W * 0.8) / 24)));   // the treat as big as the space allows
+    Y.k = Math.max(1, Math.min(4, Math.floor(room / 48), Math.floor((Y.wide ? (W - L.safeR - L.safeL) * 0.4 : W * 0.8) / 24)));   // the treat as big as the space allows
     Y.serve = wide ? { x: rx1 - s - 8, y: L.safeT + 4, s: s + 4 } : { x: Math.round(W / 2 - (s + 4) / 2), y: L.safeT + 2, s: s + 4 };   // the serve bell lives in the top bar
     Y.cxScoop = Math.round((rx0 + rx1) / 2);
   }
 
   /* ---------- state ---------- */
-  const st = { mode: 'swirl', mach: 1, cx: 0, hold: null, pour: 0, flies: [], serveOut: 0, slideIn: 0, wob: 0, full: 0, made: 0 };
+  const st = { shelf: 0, bounce: 0, mode: 'swirl', mach: 1, cx: 0, hold: null, pour: 0, flies: [], serveOut: 0, slideIn: 0, wob: 0, full: 0, made: 0 };
   let whirr = null;
   const nozzleX = i => Y.mach[i].x + Math.round(Y.mach[i].w / 2);
+  const shelfTarget = () => Y.cxScoop - (Y.mach[st.mach].bx + Math.round(Y.mach[st.mach].w / 2));
+  function placeMachines() { for (const m of Y.mach) m.x = Math.round(m.bx + st.shelf); }
   const nozzleY = i => Y.mach[i].y + Y.mach[i].h + 4;
-  function targetX() { return st.mode === 'swirl' ? nozzleX(st.mach) : Y.cxScoop; }
+  function targetX() { return Y.cxScoop; }
   function treatTopScreen() { const [ty] = topSurface(); return Y.yb + ty * Y.k; }
 
   function addTopping(t) {
@@ -170,16 +198,18 @@
     st.wob = Math.max(0, st.wob - dt * 2);
     // slide the treat under the right machine
     if (!st.serveOut) st.cx += (targetX() - st.cx) * Math.min(1, dt * 7);
+    st.shelf += (shelfTarget() - st.shelf) * Math.min(1, dt * 7); placeMachines();
+    st.bounce = Math.max(0, st.bounce - dt * 3);
     if (st.slideIn > 0) st.slideIn = Math.max(0, st.slideIn - dt * 1.8);
     // pouring soft serve while a finger is down
-    const near = Math.abs(st.cx - targetX()) < 3 && !st.serveOut && st.slideIn === 0;
+    const near = Math.abs(st.shelf - shelfTarget()) < 3 && !st.serveOut && st.slideIn === 0;
     const pouring = st.mode === 'swirl' && st.hold != null && near && B.amount < 1.15;
     st.pour += ((pouring ? 1 : 0) - st.pour) * Math.min(1, dt * 12);
     if (pouring) {
       const last = B.segs[B.segs.length - 1];
       if (!last || last.f !== st.mach) B.segs.push({ f: st.mach, a0: B.amount });
       B.amount = Math.min(1.15, B.amount + dt * 0.32);
-      if (B.amount >= 1.15) { st.full = 1; play('bell', 1.3); sparkle(st.cx, treatTopScreen(), 14, 10); }
+      if (B.amount >= 1.15) { st.full = 1; st.bounce = 1; play('bell', 1.3); sparkle(st.cx, treatTopScreen(), 14, 10); }
     }
     whirr(pouring ? 0.07 : 0);
     st.full = Math.max(0, st.full - dt);
@@ -266,7 +296,7 @@
     enter() {
       layout(); newBuild();
       Object.assign(st, { mode: 'swirl', mach: Math.floor(Math.random() * SWIRLS.length), hold: null, pour: 0, flies: [], serveOut: 0, slideIn: 1, wob: 0 });
-      st.cx = targetX();
+      st.cx = targetX(); st.shelf = shelfTarget(); placeMachines();
       const a = audio(); if (a) a.startMusic();
       SCENES.icecream._keepMusic = false;
     },
@@ -288,9 +318,9 @@
       // the treat: slides in fresh, rises away when served
       const out = st.serveOut, rise = out ? eout(clamp01(out / 1.1)) : 0;
       const sx = st.cx - st.slideIn * (W * 0.7), yb = Y.yb - rise * (Y.yb + 40);
-      const wob = Math.sin(T * 30) * 0.06 * st.wob + (st.full > 0 ? Math.sin(T * 25) * 0.04 : 0);
+      const wob = 0, hop = Math.round(Math.abs(Math.sin(st.bounce * Math.PI * 2)) * 3 * Y.k * st.bounce + Math.abs(Math.sin(T * 30)) * st.wob * 2 * Y.k);
       alpha(0.2, () => R(Math.round(sx - 10 * Y.k), Y.yb - 1, 20 * Y.k, 2, '#2a6a5a'));
-      drawTreat(sx, yb, Y.k, wob);
+      drawTreat(sx, yb - hop, Y.k, wob);
       for (const f of st.flies) {
         const k = eout(f.k), x = lerp(f.x0, st.cx, k), y = lerp(f.y0, treatTopScreen() - 4, k) - Math.sin(k * Math.PI) * 24, c = SCOOPS[f.f];
         g.save(); g.translate(Math.round(x), Math.round(y)); g.scale(Y.k, Y.k); drawScoop(c, 0, 0); g.restore();
@@ -326,6 +356,6 @@
       return true;
     },
     release(id) { if (st.hold === id) st.hold = null; },
-    _st: st, _b: B, _y: Y,
+    _st: st, _b: B, _y: Y, _draw: (x, yb, k) => drawTreat(x, yb, k),
   };
 })();
