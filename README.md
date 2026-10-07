@@ -7,7 +7,7 @@ A pixel-art toy for a toddler who loves fire trucks. One page, no build step, no
 - **Tap a paint pot** to repaint the vehicle with the yellow arrow over it. A recorded voice says the color name. Colors are remembered on the device.
 - **Upstairs** the crew lives their day: eating at the table, watching TV, sleeping in the bunk room, sliding down the fire pole. Tap anyone to make them hop and wave; tap the sleeper to wake them.
 - **Tap the sun** for night (the sun rolls away over the top and the moon rises in from the right); tap the moon for morning.
-- **Mini-game menu** (top left): tap the yellow toy-box button to open all the mini-game buttons; tap it again to close them.
+- **Mini-game menu** (top left): the yellow toy-box button opens a full-screen page of big picture tiles with names; tap a tile to play, or the red X to go back.
   - **Flame: Spray the Fire.** The fire truck races to a burning house. Drag or tap to spray; every fire goes out the moment the water touches it. Neighbors and kitties wave from the windows.
   - **Red cross: ambulance mission.** Help a hurt kid, hold the go button to drive to the hospital.
   - **Star: police mission.** Stop the traffic so ducks and people can cross.

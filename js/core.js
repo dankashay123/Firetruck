@@ -88,6 +88,9 @@ const FONT = {
   N: '110101101101101', O: '010101101101010', R: '110101110101101', S: '011100010001110',
   T: '111010010010010', H: '101101111101101', P: '110101110100100', L: '100100100100111',
   G: '011100101101011', Z: '111001010100111', C: '011100100100011', '!': '010010010000010', ' ': '000000000000000',
+  B: '110101110101110', D: '110101101101110', K: '101101110101101', M: '101111111101101', U: '101101101101111',
+  V: '101101101101010', W: '101101111111101', Y: '101101010010010', Q: '010101101110011', J: '001001001101010',
+  X: '101101010101101', '?': '110001010000010',
 };
 function text(str, x, y, s, c) {
   [...str].forEach((ch, i) => {
@@ -939,6 +942,7 @@ cv.addEventListener('pointerdown', e => {
   initAudio();
   if (wipe) return;
   const p = toVirtual(e), sc = SCENES[scene];
+  if (sc.modal && sc.modal()) { if (sc.tap) sc.tap(p.x, p.y, e.pointerId); return; }   // a full-screen page covers the sky
   if (hitSky(p.x, p.y)) { setNight(!isNight()); return; }
   if (!sc.freeTouch && hitCloud(p.x, p.y)) { cycleWeather(); return; }
   if (sc.tap && sc.tap(p.x, p.y, e.pointerId)) return;

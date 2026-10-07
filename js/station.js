@@ -280,9 +280,9 @@
       else if (!pendingMission) { menu.open = !menu.open; menu.open ? [523, 784].forEach((f, i) => tone('sine', f, i * 0.06, 0.15, 0.12)) : [784, 523].forEach((f, i) => tone('sine', f, i * 0.06, 0.15, 0.1)); }
       return true;
     }
-    if (menu.open && menu.k > 0.6) for (const b of btns) {
-      if (!btnShown(b)) continue;
-      if ((x - b.x) ** 2 + (y - b.y) ** 2 <= (b.r + 6) ** 2) { launch(b.k); return true; }
+    if (menu.open) {   // the full-screen game picker: a tile starts its game, anything else stays put
+      if (menu.k > 0.6) for (const t of pickerTiles()) if (x >= t.x && x < t.x + t.w && y >= t.y && y < t.y + t.h) { SFX.chime(); launch(t.k); return true; }
+      return true;
     }
     const r = L.blob / 2 + 4;
     for (const p of pots) {
@@ -643,7 +643,13 @@
   function drawMenuButton() {
     const { x, y, r } = menu;
     if (bed.on) { roundButton(x, y, r, '#ffd21f', true); drawSun0(x, y); return; }
-    roundButton(x, y, r, menu.open ? '#ffffff' : '#ffd21f', !menu.open);
+    if (menu.open) {   // close button
+      roundButton(x, y, r, '#ffffff', false);
+      const a = Math.round(r * 0.45);
+      for (let i = -a; i <= a; i++) { R(x + i - 1, y + i - 1, 3, 3, '#e8222b'); R(x + i - 1, y - i - 1, 3, 3, '#e8222b'); }
+      return;
+    }
+    roundButton(x, y, r, '#ffd21f', true);
     // four toy squares: red, blue, white and green, spreading apart as the menu opens
     const d = Math.round(r * 0.12 + 1 + menu.k * 1.5), s = Math.max(5, Math.round(r * 0.36));
     const sq = [['#e8222b', -1, -1], ['#2a6fe0', 1, -1], ['#3fb43a', -1, 1], ['#f57a12', 1, 1]];
@@ -652,19 +658,69 @@
       R(cx, cy + 1, s, s, '#2f3240'); R(cx, cy, s, s, c); R(cx + 1, cy + 1, 2, 1, '#ffffff');
     }
   }
+  /* ---------- the game picker: a full-screen page of big picture tiles ---------- */
+  const LABEL = { fire: 'FIRE', amb: 'AMBULANCE', police: 'POLICE', help: 'WHO HELPS?', wash: 'CAR WASH', chopper: 'HELICOPTER', stickers: 'STICKERS', movies: 'MOVIES', drive: 'DRIVE', bed: 'BEDTIME' };
+  const TILE_BG = { fire: '#ffd9d4', amb: '#e8f0fa', police: '#d6e4ff', help: '#d9f2d4', wash: '#d4f1fa', chopper: '#dff1ff', stickers: '#ffdcef', movies: '#e6d9f2', drive: '#ffe6cc', bed: '#e2d6f5' };
+  let iconCv = null;
+  function bigIcon(k, cx, cy, sc) {   // a launcher icon drawn small, then scaled up with crisp pixels
+    if (!iconCv) { iconCv = document.createElement('canvas'); iconCv.width = 40; iconCv.height = 42; }
+    const ig = iconCv.getContext('2d'), prev = g;
+    ig.clearRect(0, 0, 40, 42); g = ig; ICONS[k](20, 20, 16); g = prev;
+    g.imageSmoothingEnabled = false;
+    g.drawImage(iconCv, Math.round(cx - 20 * sc), Math.round(cy - 20 * sc), Math.round(40 * sc), Math.round(42 * sc));
+  }
+  function pickerTiles() {
+    const kinds = btns.filter(btnShown).map(b => b.k), n = kinds.length;
+    const x0 = L.safeL + 10, x1 = W - L.safeR - 10, y0 = Math.max(menu.y + menu.r + 12, L.safeT + 12), y1 = H - L.safeB - 10;
+    const aw = x1 - x0, ah = y1 - y0, gap = 8;
+    let best = null;
+    for (let cols = 1; cols <= n; cols++) {   // the column count that gives the biggest tiles
+      const rows = Math.ceil(n / cols);
+      const w = Math.floor(Math.min((aw - (cols - 1) * gap) / cols, ((ah - (rows - 1) * gap) / rows) / 1.05));
+      if (!best || w > best.w) best = { cols, rows, w };
+    }
+    const { cols, rows, w } = best, h = Math.round(w * 1.05);
+    const gx = x0 + Math.round((aw - (cols * w + (cols - 1) * gap)) / 2), gy = y0 + Math.round((ah - (rows * h + (rows - 1) * gap)) / 2);
+    return kinds.map((k, i) => {
+      const row = Math.floor(i / cols), inRow = Math.min(cols, n - row * cols), col = i % cols;
+      const rx = gx + Math.round((cols - inRow) * (w + gap) / 2);   // center a short last row
+      return { k, i, x: rx + col * (w + gap), y: gy + row * (h + gap), w, h };
+    });
+  }
+  function drawPicker() {
+    const e = 1 - (1 - menu.k) ** 3;
+    alpha(Math.min(1, menu.k * 1.6), () => {
+      R(0, 0, W, H, '#3d8fd6');
+      for (let y = 0; y < H; y += 16) R(0, y, W, 8, '#4597dc');
+      for (let i = 0; i < 18; i++) {   // drifting stars and dots
+        const x = (i * 97 + T * (6 + i % 4)) % (W + 10) - 5, y = (i * 61) % H;
+        R(x, y, 2, 2, i % 3 ? '#8cc6f2' : '#fff3a6');
+      }
+    });
+    const tiles = pickerTiles(), w0 = tiles.length ? tiles[0].w : 0;
+    let ts = 3;   // one label size for every tile: the biggest that fits the longest name
+    while (ts > 1 && tiles.some(t => textWidth(LABEL[t.k] || '', ts) > w0 - 10)) ts--;
+    for (const t of tiles) {
+      const k = Math.max(0, Math.min(1, e * 1.5 - t.i * 0.05));
+      if (k <= 0) continue;
+      const pop = 1 - (1 - k) ** 3, bob = Math.round(Math.sin(T * 2.2 + t.i) * 1.2);
+      const x = t.x, y = t.y + Math.round((1 - pop) * 24) + bob, w = t.w, h = t.h;
+      alpha(k, () => {
+        R(x + 2, y + 4, w, h, 'rgba(0,0,0,0.22)');
+        R(x + 2, y - 2, w - 4, h + 4, '#ffffff'); R(x - 2, y + 2, w + 4, h - 4, '#ffffff'); R(x, y, w, h, '#ffffff');
+        R(x + 3, y + 3, w - 6, h - 6, TILE_BG[t.k] || '#eeeeee');
+        const label = LABEL[t.k] || '';
+        const lh = 5 * ts + 8, sc = Math.max(1, Math.min(w - 16, h - lh - 10) / 42);
+        const icy = y + Math.round((h - lh - 42 * sc) / 2) + Math.round(20 * sc);   // icon sits fully above its label
+        if (t.k === 'bed' && bed.on) { roundButton(x + w / 2, icy, 16 * sc, '#ffd21f', true); drawSun0(x + w / 2, icy); }
+        else bigIcon(t.k, x + w / 2, icy, sc);
+        text(label, Math.round(x + (w - textWidth(label, ts)) / 2), y + h - lh + 2, ts, '#2a2a3a');
+      });
+    }
+  }
   function drawButtons() {
     if (pendingMission) menu.open = false;
-    if (menu.k > 0.02 && !bed.on && !pendingMission) {
-      const e = 1 - (1 - menu.k) ** 3;   // ease out
-      let n = 0;
-      for (const b of btns) {
-        if (!btnShown(b)) continue;
-        const k = Math.max(0, Math.min(1, e * 1.4 - n++ * 0.04));
-        if (k <= 0) continue;
-        const bx = Math.round(menu.x + (b.x - menu.x) * k), by = Math.round(menu.y + (b.y - menu.y) * k);
-        if (k < 1) alpha(k, () => ICONS[b.k](bx, by, b.r)); else ICONS[b.k](bx, by, b.r);
-      }
-    }
+    if (menu.k > 0.02 && !bed.on && !pendingMission) drawPicker();
     drawMenuButton();
   }
   function drawSun0(x, y) { circle(x, y, 7, '#ff9a3a'); for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; R(x + Math.cos(a) * 10 - 1, y + Math.sin(a) * 10 - 1, 2, 2, '#ff9a3a'); } }
@@ -672,6 +728,8 @@
   /* ---------- scene ---------- */
   SCENES.station = {
     menu,   // read by the automated tests
+    modal: () => menu.open && !bed.on,
+    _tiles: () => pickerTiles(),
     layout,
     groundY: () => L.hillY,
     enter(arg) {
