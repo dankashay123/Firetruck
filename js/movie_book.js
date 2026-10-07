@@ -323,12 +323,12 @@
       ellipse(-70, -16, 46, 6, '#f2d878'); ellipse(-70, -16, 40, 4, '#f8e6a0');
       reeds(v.x0, -20, -30, -2); reeds(60, v.x1, -24, -2);
       cattails(-130, -40, -4, 1); cattails(80, 150, -4, 2);
-      for (let i = 0; i < 5; i++) { const hx = -105 + i * 22, hp = Math.max(0, Math.sin(T * 3 + i * 1.7)) * 7; A.toad(hx, -3 - hp, 1, { legsOut: hp > 2 }); }
+      for (let i = 0; i < 5; i++) { const hx = -105 + i * 22, hp = Math.abs(hx - bx) < 40 ? 0 : Math.max(0, Math.sin(T * 3 + i * 1.7)) * 5; A.toad(hx, -6 - hp, 1, { legsOut: hp > 2 }); }
       for (let i = 0; i < 3; i++) A.bird(((T * 22 + i * 90) % 360) - 180, -70 + i * 9, 1, T + i);
       road(0, 18);
       fill(18, '#d8a040'); strokes(20, v.y1, '#b88028', 0.12, 5);
-      cattails(-60, -20, 30, 3);
       A.blue(bx, 12, 1, 1, { spin: bx * 0.25 });
+      cattails(-60, -20, 30, 3);
       rock(32, 34, 13, 6);
       A.toad(32, 31, 2, { wink: su > 0.8 && su < 0.86, croak: su > 0.56 && su < 0.62 && Math.floor(T * 8) % 2 });
     },
@@ -399,7 +399,7 @@
       fill(-30, '#a8a040', 0); for (let x = v.x0 - (v.x0 % 6); x < v.x1; x += 6) R(x, -28 + Math.round(Math.sin(x * 0.04) * 3), 4, 1, '#8a8a30');
       for (let i = -3; i < 12; i++) pine(i * 9 + 120, -24, 9);
       autumnTree(30, ry(30) - 4, 14, ['#c8401a', '#a83010', '#e06a20']);
-      autumnTree(160, ry(160) - 6, 16, ['#a8442a', '#8a3020', '#c8603a']);
+      autumnTree(140, ry(140) - 6, 16, ['#a8442a', '#8a3020', '#c8603a']);
       // the road rolling over the hills, golden grass below
       for (let x = v.x0 - (v.x0 % 2); x < v.x1; x += 2) {
         const y = Math.round(ry(x));
@@ -439,14 +439,18 @@
     world(su) {
       const v = vis(), dx = this.dumpX(su);
       hills(-30, 6, 0.03, 5, '#c8c070'); fill(-28, '#c89a3a', 0); strokes(-26, 0, '#a8781a', 0.12, 8);
-      A.horse(-120, -22, 1, 1, {}); A.goat(-96, -22, 1, 1, {}); A.cow(-150, -22, 1, 1, {});
+      A.cow(-160, -3, 1, 1, {}); A.horse(-122, -3, 1, 1, {}); A.goat(-92, -3, 1, 1, {});
       road(0, 20);
       fill(20, '#d8a040'); strokes(22, v.y1, '#b88028', 0.12, 9);
-      const bx = lerp(-10, 20, seg(su, 0, 0.45)), close = Math.abs(dx - bx) < 90;
-      A.blue(bx, this.blueY(su), 1, 1, { spin: bx * 0.3, mood: close ? 'wide' : 'happy', bounce: close ? Math.floor(T * 16) % 2 : 0 });
+      // nearest last: the dump keeps to the middle of the road, Blue pulls over toward us
+      const bx = lerp(-10, 20, seg(su, 0, 0.45)), by = this.blueY(su), close = Math.abs(dx - bx) < 90;
       const duckFly = clamp01((dx - 210) / 120);
-      A.duck(262 + duckFly * 90, 22 - duckFly * 40, 1, 1, { flap: duckFly > 0 ? (Math.floor(T * 10) % 2 ? 1 : -1) : 0, mouth: duckFly > 0 && duckFly < 0.6 });
-      A.dump(dx, 12, 1, 1, { spin: dx * 0.2, mood: 'cross', shake: Math.floor(T * 20) % 2 });
+      const actors = [
+        [12, () => A.dump(dx, 12, 1, 1, { spin: dx * 0.2, mood: 'cross', shake: Math.floor(T * 20) % 2 })],
+        [by, () => A.blue(bx, by, 1, 1, { spin: bx * 0.3, mood: close ? 'wide' : 'happy', bounce: close ? Math.floor(T * 16) % 2 : 0 })],
+        [22, () => A.duck(262 + duckFly * 90, 22 - duckFly * 40, 1, 1, { flap: duckFly > 0 ? (Math.floor(T * 10) % 2 ? 1 : -1) : 0, mouth: duckFly > 0 && duckFly < 0.6 })],
+      ];
+      actors.sort((a, b) => a[0] - b[0]).forEach(a => a[1]());
     },
     upd(su) { const dx = this.dumpX(su); if (Math.random() < 0.5) spawn(2, () => ({ x: sx(dx - 30), y: sy(10), vx: rand(-60, -20), vy: rand(-50, -20), g: 150, life: 0.5, max: 0.5, s: 1, c: '#c8d4dc' })); },
     front(su) {
@@ -483,9 +487,9 @@
       for (let p = 0; p < 1; p += 0.004) { const [x, y] = curve(p); circle(x, y, 9, '#a8a294'); }
       for (let p = 0; p < 1; p += 0.004) { const [x, y] = curve(p); circle(x, y, 7, '#c2bcae'); if (hsh(p * 900) < 0.2) R(x - 4, y - 2, 6, 1, '#a8a294'); }
       mudPool(PUD[0], PUD[1] + 4, 26, 13, 4);
-      for (let i = 0; i < 14; i++) { const x = -40 + i * 9, y = -60 + i * 6; R(x, y, 2, 2, '#f4efe2'); if (i < 13) R(x + 1, y + 1, 9, 1, '#f4efe2'); }
-      for (const [tx, ty, r, c] of [[-100, -40, 14, '#c8601a'], [110, -50, 18, '#d8902a'], [-80, 60, 12, '#a85a2a']]) { circle(tx + 3, ty + 3, r, '#b87018'); circle(tx, ty, r, c); circle(tx - 3, ty - 3, r * 0.5, '#f2b23c'); }
-      A.horse(-120, -62, 1, 1, {}); A.hen(-104, -54, 1, 1, {}); A.duck(-92, -50, 1, 1, {}); A.sheep(-110, 70, 1, 1, {}); A.pig(-92, 72, 1, 1, {}); A.cow(-60, 80, 1, 1, {}); A.goat(30, -60, 1, 1, {});
+      for (let i = 0; i < 13; i++) { const x = -20 + i * 9, y = -70 + i * 2; R(x, y, 2, 2, '#f4efe2'); if (i < 12) R(x + 1, y + 1, 9, 2, '#f4efe2'); }
+      for (const [tx, ty, r, c] of [[-60, -46, 12, '#c8601a'], [128, -62, 15, '#d8902a'], [-25, 70, 11, '#a85a2a']]) { circle(tx + 3, ty + 3, r, '#b87018'); circle(tx, ty, r, c); circle(tx - 3, ty - 3, r * 0.5, '#f2b23c'); }
+      A.horse(-128, -52, 1, 1, {}); A.hen(-104, -50, 1, 1, {}); A.duck(-150, -34, 1, 1, {}); A.sheep(-122, 72, 1, 1, {}); A.pig(-100, 74, 1, 1, {}); A.cow(-68, 78, 1, 1, {}); A.goat(70, -20, 1, 1, {});
       const [x, y, a] = this.pos(su);
       A.dumpTop(x, y, a, 1);
       for (let i = 0; i < 26; i++) { const ph = (T * 0.9 + i * 0.137) % 1, rx = v.x0 + hsh(i * 7.7) * (v.x1 - v.x0), ryy = v.y0 + ph * (v.y1 - v.y0); R(rx, ryy, 1, 3, '#ffffff'); R(rx - 1, ryy + 2, 3, 1, '#ffffff'); }
@@ -541,10 +545,11 @@
     road(0, 20); fill(20, '#d8a040'); strokes(22, v.y1, '#b88028', 0.12, 13);
     mudPool(96, 14, 90, 9, 3);
     if (o.behind) o.behind();
+    if (o.out) mudFront(96, 16, 190, 10);   // once the trucks are out, the mud stays behind them
     A.dump(o.dumpX != null ? o.dumpX : DUMP_X, 18 + (o.dumpSink != null ? o.dumpSink : 6), 1, 1, { spin: o.spin ? T * 30 : 0, mood: o.dumpMood || 'worried', mud: 0.5, shake: o.shake || 0 });
     if (blueX != null) A.blue(blueX, 15 + blueSink, 1, 1, { spin: o.spin ? T * 30 : blueX * 0.3, mood: o.blueMood || 'happy', mud: o.blueMud || 0, bounce: o.bounce || 0, shake: o.shake || 0 });
     if (o.front) o.front();
-    mudFront(96, 16, 190, 10);
+    if (!o.out) mudFront(96, 16, 190, 10);
   }
 
   // 8. Then into the mud — bump, bump, bump — came Little Blue to help, and now both are stuck.
@@ -623,7 +628,7 @@
   function pushLine(su, o) {
     const slots = lineSlots(), lean = Math.round(Math.sin(T * 9) * 0.8 + (o.lean || 0));
     const fr = o.free || 0, cheer = o.cheer || 0;
-    for (let i = slots.length - 1; i >= 0; i--) {
+    for (let i = 0; i < slots.length; i++) {
       const s = slots[i];
       if (s.k === 'toad' && !o.toadIn) continue;
       const arrive = clamp01((o.arrive == null ? 1 : o.arrive) * 1.6 - i * 0.07);
@@ -637,8 +642,8 @@
   function lineSet(su, o) {
     const fr = o.free || 0;
     stuckSet(su, BLUE_STOP + fr * 90, 6 * (1 - fr), {
-      spin: true, dumpX: DUMP_X + fr * 90, dumpSink: 6 * (1 - fr), dumpMood: fr > 0.6 ? 'happy' : 'worried', blueMood: fr > 0.6 ? 'happy' : 'worried', blueMud: 0.8,
-      shake: fr > 0 && fr < 1 ? 0 : Math.floor(T * 16) % 2,
+      spin: true, dumpX: DUMP_X + fr * 98, dumpSink: 6 * (1 - fr), dumpMood: fr > 0.6 ? 'happy' : 'worried', blueMood: fr > 0.6 ? 'happy' : 'worried', blueMud: 0.8,
+      shake: fr > 0 && fr < 1 ? 0 : Math.floor(T * 16) % 2, out: fr > 0.35,
       behind: () => pushLine(su, o),
     });
   }
@@ -659,13 +664,14 @@
       hills(-34, 8, 0.03, 13, '#d8b060'); fill(-30, '#e8b040'); strokes(-28, v.y1, '#c88a20', 0.14, 16);
       for (let i = 0; i < 9; i++) pine(-80 + i * 13, -30, 8);
       let x, h = 0, tuck = false;
-      if (k < 0.3) x = lerp(-80, -16, k / 0.3);
-      else if (k < 0.75) { const j = (k - 0.3) / 0.45; x = lerp(-16, 34, j); h = Math.sin(j * Math.PI) * 28; tuck = j > 0.15 && j < 0.85; }
+      if (k < 0.3) x = lerp(-80, -22, k / 0.3);
+      else if (k < 0.75) { const j = (k - 0.3) / 0.45; x = lerp(-22, 34, j); h = Math.sin(j * Math.PI) * 24; tuck = j > 0.15 && j < 0.85; }
       else x = lerp(34, 80, (k - 0.75) / 0.25);
       alpha(0.25, () => ellipse(x, 15, Math.max(4, 9 - h / 5), 1, '#6a4a10'));
-      fence(-40, 40, 12);
-      A.goat(x, 14 - h, 1, 1, { run: !tuck, tuck, step: Math.floor(T * 10) % 2, mouth: h > 20 });
-      if (h > 22 && Math.random() < 0.3) sparkle(sx(x), sy(-h - 6), 10 * cam.z, 2);
+      R(-9, -4, 3, 18, '#f4efe2'); R(8, -4, 3, 18, '#f4efe2'); R(-9, -1, 20, 2, '#f4efe2'); R(-9, 4, 20, 2, '#f4efe2'); R(-9, 9, 20, 2, '#f4efe2');
+      R(-7, -4, 1, 18, '#d8d2c4'); R(10, -4, 1, 18, '#d8d2c4'); R(-9, 14, 20, 1, '#c8902a');
+      A.goat(x, 14 - h, 1, 1, { run: !tuck, tuck, step: Math.floor(T * 10) % 2, mouth: h > 16 });
+      if (h > 18 && Math.random() < 0.3) sparkle(sx(x), sy(-h - 6), 10 * cam.z, 2);
     },
     hens(su) {
       const v = vis(), x = lerp(-110, 70, seg(su, 1.0, 1.5)), st = Math.floor(T * 12) % 2;
@@ -704,7 +710,7 @@
       { u: 0, world: su => lineSet(su, {}), cam(su) { setCam(lerp(-110, 90, seg(su, 0, 0.55)), -14, 150, 92); } },
       { u: 0.55, world: su => lineSet(su, {}), cam() { setCam(DUMP_X - 20, -18, 104, 66); } },
       { u: 1.0, world: su => s11.hop(su), cam(su) { setCam(Math.max(-190, s11.toadX(su)) + 10, -10, 90, 60); } },
-      { u: 1.45, world: su => s11.flex(su), cam() { setCam(0, -18, 52, 50); } },
+      { u: 1.45, world: su => s11.flex(su), cam() { setCam(0, -18, 70, 50); } },
     ],
     words: [[1.62, 'CROAK', () => [0, -42]]],
   };
@@ -725,7 +731,7 @@
       { u: 0, cam(su) { setCam(portrait() ? 40 : 26, -16, portrait() ? 160 : 250, 112); } },
       { u: 0.62, cam(su) { setCam(lerp(DUMP_X, DUMP_X + 90, eout(seg(su, 0.55, 0.72))) - 30, -22, 124, 78); } },
     ],
-    words: [[0.66, 'BEEP', su => [BLUE_STOP + 90 + 18, -22]], [0.74, 'HONK', () => [DUMP_X + 90 + 30, -46], true]],
+    words: [[0.66, 'BEEP', su => [BLUE_STOP + 90 + 18, -22]], [0.74, 'HONK', () => [DUMP_X + 98 + 30, -46], true]],
     numbers: [[0.08, 1], [0.24, 2], [0.4, 3]],
     noises: [[0.56, 'SPLAT'], [0.7, 'YAY']],
   };
