@@ -38,7 +38,7 @@
     B.hydX = B.x + B.w + 6;
     furnish();
     // mini-game launchers: one big menu button that opens into a grid of the rest
-    const kinds = ['fire', 'amb', 'police', 'help', 'wash', 'chopper', 'stickers', 'movies', 'drive', 'bed'];
+    const kinds = ['fire', 'amb', 'police', 'help', 'wash', 'icecream', 'chopper', 'stickers', 'movies', 'drive', 'bed'];
     const side = B.x - L.safeL >= 100 && B.top - L.safeT < 120;
     const sp = side ? 32 : 38, r = side ? 13 : 16;
     const cols = side ? 3 : Math.max(3, Math.min(6, Math.floor((W - L.safeR - L.safeL - 8) / sp)));
@@ -217,7 +217,7 @@
     if (k === 'bed') { bed.on ? wakeUp() : bedtime(); return; }
     if (bed.on) return;
     if (!SCENES[k]) return;   // that mini-game isn't installed
-    if (k === 'help' || k === 'chopper' || k === 'stickers' || k === 'movies' || k === 'drive') { SFX.chime(); goScene(k); return; }
+    if (k === 'help' || k === 'chopper' || k === 'stickers' || k === 'movies' || k === 'drive' || k === 'icecream') { SFX.chime(); goScene(k); return; }
     if (k === 'wash') { if (pendingMission) return; SFX.chime(); say(pick(V[selected].kind)); launchMission(selected, 'wash'); return; }
     if (pendingMission) return;
     SFX.bell(); bell.swing = 1.4;
@@ -624,6 +624,12 @@
       for (let k = 0; k < 7; k++) R(x - 2, y - 4 + k, Math.min(k, 6 - k) + 1, 1, '#ffffff');
       R(x - 4, y + 6, 8, 2, '#ffd21f'); R(x - 9, y - 9, 2, 2, '#e8222b'); R(x + 7, y - 9, 2, 2, '#e8222b');
     },
+    icecream: (x, y, r) => {
+      roundButton(x, y, r, '#ff8fb8', true);
+      for (let k = 0; k < 8; k++) R(x - 4 + (k >> 1), y + 1 + k, 9 - (k >> 1) * 2, 1, k % 2 ? '#b07a34' : '#d9a35a');
+      circle(x, y - 3, 5, '#fff6e0'); circle(x - 2, y - 5, 2, '#ffffff'); R(x, y - 10, 2, 2, '#e8222b');
+      R(x - 3, y - 4, 1, 1, '#2a6fe0'); R(x + 2, y - 2, 1, 1, '#3fb43a'); R(x + 1, y - 6, 1, 1, '#ffd21f');
+    },
     drive: (x, y, r) => {
       roundButton(x, y, r, '#f57a12', true);
       circle(x, y, 9, '#2f3240'); circle(x, y, 7, '#f57a12'); circle(x, y, 2, '#2f3240');
@@ -659,8 +665,8 @@
     }
   }
   /* ---------- the game picker: a full-screen page of big picture tiles ---------- */
-  const LABEL = { fire: 'FIRE', amb: 'AMBULANCE', police: 'POLICE', help: 'WHO HELPS?', wash: 'CAR WASH', chopper: 'HELICOPTER', stickers: 'STICKERS', movies: 'MOVIES', drive: 'DRIVE', bed: 'BEDTIME' };
-  const TILE_BG = { fire: '#ffd9d4', amb: '#e8f0fa', police: '#d6e4ff', help: '#d9f2d4', wash: '#d4f1fa', chopper: '#dff1ff', stickers: '#ffdcef', movies: '#e6d9f2', drive: '#ffe6cc', bed: '#e2d6f5' };
+  const LABEL = { fire: 'FIRE', amb: 'AMBULANCE', police: 'POLICE', help: 'WHO HELPS?', wash: 'CAR WASH', icecream: 'ICE CREAM', chopper: 'HELICOPTER', stickers: 'STICKERS', movies: 'MOVIES', drive: 'DRIVE', bed: 'BEDTIME' };
+  const TILE_BG = { fire: '#ffd9d4', amb: '#e8f0fa', police: '#d6e4ff', help: '#d9f2d4', wash: '#d4f1fa', icecream: '#ffe0ec', chopper: '#dff1ff', stickers: '#ffdcef', movies: '#e6d9f2', drive: '#ffe6cc', bed: '#e2d6f5' };
   let iconCv = null;
   function bigIcon(k, cx, cy, sc) {   // a launcher icon drawn small, then scaled up with crisp pixels
     if (!iconCv) { iconCv = document.createElement('canvas'); iconCv.width = 40; iconCv.height = 42; }
