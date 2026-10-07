@@ -97,7 +97,7 @@
   function vizsla(x, yb, dir = 1, s = 1, o = {}) {
     const pose = o.pose || 'stand', gp = gait(o), wag = o.wag ? Math.floor(T * 8) % 2 : 0, bark = o.bark ? 1 : 0;
     const key = `vz:${pose}:${gp.f}:${gp.amp}:${wag}:${bark}`;
-    stamp(key, 58, 46, VZ_PAL, '#4a1e0a', c => {
+    stamp(key, 66, 46, VZ_PAL, '#4a1e0a', c => {
       const { V1, V2, V3, V4, EAR } = VZ;
       // far legs, in shadow
       const fl = legPts(true, 9.5, -14.5, gp, 0.5, 2.2), hl = legPts(false, -12, -15.5, gp, 0, 2.2);
@@ -116,14 +116,21 @@
       const nf = pose === 'point' ? [[10.5, -14.5], [14, -10.8], [12.8, -7.4], [12.4, -6.4], [14, -6.2]] : legPts(true, 10.5, -14.5, gp, 0, 2.2);
       const nh = legPts(false, -11, -15.5, gp, 0.5, 2.2);
       drawLeg(c, nh, 3.8, 2.2, V1, V3); drawLeg(c, nf, 3.4, 2.2, V1, V3);
-      // neck and collar
-      curve(c, [['M', 6, -23.6], ['Q', 10, -31.2, 14, -33.2], ['L', 18.6, -30.6], ['Q', 16, -24, 15, -18], ['Z']], V1);
-      curve(c, [['M', 16.6, -27], ['Q', 15.6, -22, 15, -18]], V3, false, 0.9);
-      poly(c, [[8.4, -24.6], [13, -30.4], [15.8, -28.7], [12, -22.6]], VZ.COL);
-      E(c, 12.6, -22.6, 0.85, 0.85, VZ.RING);
+      // neck: thick where it meets the shoulders, sloping forward to the head (or bending down to chew)
+      const chew = pose === 'chew';
+      const neck = chew
+        ? [['M', 1, -23.8], ['Q', 9, -26.4, 15, -22.6], ['L', 19.6, -17.4], ['L', 16.4, -12.4], ['Q', 13.6, -11.6, 9, -11.6], ['Z']]
+        : [['M', 1, -23.8], ['Q', 7, -31, 12, -33.6], ['L', 18.6, -30], ['Q', 18, -24, 15.4, -15], ['Z']];
+      curve(c, neck, V1);
+      if (!chew) { curve(c, [['M', 17.8, -27], ['Q', 17.2, -21, 15.4, -16]], V3, false, 0.9); curve(c, [['M', 3, -24.2], ['Q', 7.4, -30, 11.6, -32.6]], V2, false, 0.8); }
+      c.save(); curve(c, neck, V1); c.clip();   // the collar wraps around the neck
+      if (chew) poly(c, [[11.4, -27], [13.4, -27], [13.4, -10], [11.4, -10]], VZ.COL);
+      else poly(c, [[7.4, -32.4], [19.4, -27.2], [18.8, -25.4], [6.8, -30.6]], VZ.COL);
+      c.restore();
+      if (chew) E(c, 12.4, -11.6, 0.85, 0.85, VZ.RING); else E(c, 17.6, -25, 0.85, 0.85, VZ.RING);
       // head (tilts, or drops down to chew)
       c.save();
-      if (pose === 'chew') { c.translate(16, -20); c.rotate(0.7); }
+      if (chew) { c.translate(17.6, -18.4); c.rotate(0.75); }
       else { c.translate(15.6, -32.6); if (pose === 'tilt') c.rotate(-0.28); }
       E(c, 1.4, -1.4, 5, 4.3, V1);
       curve(c, [['M', 3, -3.9], ['L', 9.6, -3.3], ['Q', 12.2, -2.9, 12.1, -0.8], ['L', 11.6, 0.7], ['Q', 8, 1.7, 3, 1.5], ['Z']], V1);
@@ -200,8 +207,9 @@
   const OW = { O1: '#8a6a4a', O2: '#a8845a', O3: '#5e4430', BL: '#ecdcb8', BAR: '#a07850', EY: '#ffd21f', INK: '#22222a', BK: '#f5a020', W: '#ffffff' };
   const OW_PAL = Object.values(OW);
   function owl(x, yb, s = 1, o = {}) {
-    const fly = o.fly ? (Math.floor(T * 10) % 2 ? 1 : 2) : 0, look = o.look || 0, blink = o.blink ? 1 : 0, hoot = o.hoot ? 1 : 0;
-    stamp(`ow:${fly}:${look}:${blink}:${hoot}`, 44, 34, OW_PAL, '#3a2a1a', c => {
+    const fly = o.fly ? (Math.floor(T * 10) % 2 ? 1 : 2) : 0, look = o.look || 0, blink = o.blink ? 1 : 0, hoot = o.hoot ? 1 : 0, sc = o.sc || 1;
+    stamp(`ow:${fly}:${look}:${blink}:${hoot}:${sc}`, 44 * sc + 2, 34 * sc + 2, OW_PAL, '#3a2a1a', c => {
+      c.scale(sc, sc);
       const { O1, O2, O3 } = OW;
       if (fly) { const up = fly === 1; E(c, -9, up ? -18 : -9, 9, 3.2, O3, up ? -0.5 : 0.4); E(c, 9, up ? -18 : -9, 9, 3.2, O3, up ? 0.5 : -0.4); }
       E(c, 0, -9.6, 7.2, 9.6, O1);
@@ -288,6 +296,50 @@
       if (tongue) { line(c, [[10, -20.4], [13, -20.4]], 0.6, SN.TG); line(c, [[13, -20.4], [14.2, -21.4]], 0.5, SN.TG); line(c, [[13, -20.4], [14.2, -19.6]], 0.5, SN.TG); }
     }, x, yb, 1);
   }
+  /* a few more friends along the way */
+  const CR = { S1: '#b8642a', S2: '#d8884a', S3: '#8a4a1a', BL: '#f2dcb8', INK: '#22222a', W: '#ffffff', R1: '#e8e4dc', R2: '#c8c0b4', PINK: '#f2a8a0', F1: '#f57a12', F2: '#ffb040', F3: '#c84a10' };
+  const CR_PAL = Object.values(CR);
+  function squirrel(x, yb, dir = 1, o = {}) {
+    const f = o.run ? Math.floor(T * 12) % 2 : 0;
+    stamp(`sq:${f}`, 22, 18, CR_PAL, '#4a2410', c => {
+      const { S1, S2, S3 } = CR;
+      curve(c, [['M', -3, -4], ['Q', -10, -6, -8, -12], ['Q', -6, -16, -2, -14], ['Q', -6, -12, -4, -8], ['Z']], S2);   // bushy tail
+      E(c, -6.6, -11, 3, 3.6, S2, 0.4); E(c, -7.4, -12, 1.4, 1.8, CR.BL, 0.4);
+      E(c, 0.6, -4.4, 4.4, 3, S1); E(c, 1.4, -3.4, 2.6, 1.6, CR.BL);
+      E(c, 4.6, -6.4, 2.6, 2.3, S1); poly(c, [[3.4, -8], [4, -10.6], [5, -8.2]], S3);
+      E(c, 5.4, -6.8, 0.6, 0.6, CR.INK); E(c, 7, -6, 0.5, 0.4, CR.INK);
+      line(c, f ? [[-2, -2.6], [-3.6, -0.4]] : [[-2, -2.6], [-1, -0.4]], 1.4, S3); line(c, f ? [[3, -2.6], [4.6, -0.4]] : [[3, -2.6], [2, -0.4]], 1.3, S3);
+    }, x, yb, dir);
+  }
+  function bunny(x, yb, dir = 1, o = {}) {
+    const ears = o.up ? 1 : 0;
+    stamp(`bn:${ears}`, 20, 22, CR_PAL, '#6a645a', c => {
+      const { R1, R2 } = CR;
+      E(c, -4.6, -5, 2, 2, CR.W);
+      E(c, -0.6, -4.6, 4.8, 4, R1); E(c, 0, -2.8, 3.4, 1.6, R2);
+      E(c, 3.6, -8, 2.8, 2.6, R1);
+      E(c, 2.6, -12.6 - ears, 1.1, 3.6, R1, -0.15); E(c, 4.4, -12.4 - ears, 1.1, 3.6, R1, 0.2); E(c, 4.4, -12.2 - ears, 0.5, 2.4, CR.PINK, 0.2);
+      E(c, 4.8, -8.4, 0.55, 0.6, CR.INK); E(c, 6.3, -7.4, 0.5, 0.4, CR.PINK);
+      E(c, 1.6, -0.8, 1.8, 0.8, R2);
+    }, x, yb, dir);
+  }
+  function fish(x, y, up) {   // a little orange fish leaping out of the creek
+    stamp(`fs:${up ? 1 : 0}`, 16, 14, CR_PAL, '#6a2a08', c => {
+      c.translate(0, -7); c.rotate(up ? -0.7 : 0.7);
+      E(c, 0, 0, 4.4, 2.2, CR.F1); E(c, 0.6, -0.6, 2.6, 0.8, CR.F2);
+      poly(c, [[-3.6, 0], [-6.8, -2.6], [-6.4, 2.6]], CR.F3); E(c, 2.6, -0.5, 0.55, 0.55, CR.INK);
+    }, x, y, 1);
+  }
+  function butterflies(x0, x1, ybase, n, seed) {   // fluttering pairs of wings
+    for (let i = 0; i < n; i++) {
+      const ph = T * (0.4 + hsh(i + seed) * 0.3) + i * 2.1, x = Math.round(x0 + (x1 - x0) * (0.5 + 0.45 * Math.sin(ph))), y = Math.round(ybase - 6 - 10 * hsh(i * 3 + seed) + Math.sin(ph * 3.1) * 5);
+      const c = ['#ffd21f', '#ff6fb4', '#8ec8f0', '#ffffff'][(i + seed) % 4], open = Math.floor(T * 9 + i) % 2;
+      if (open) { R(x - 2, y - 1, 2, 2, c); R(x + 1, y - 1, 2, 2, c); } else { R(x - 1, y - 2, 1, 2, c); R(x + 1, y - 2, 1, 2, c); }
+      R(x, y - 1, 1, 2, '#3a2a1a');
+    }
+  }
+  // the owl, now a friend, flapping along above the dogs
+  function owlFly(x, y, o = {}) { owl(x, y + Math.round(Math.sin(T * 3) * 2), 1, Object.assign({ fly: true, sc: 0.6 }, o)); }
   function bone(cx, yb, w, glow) {
     const h = Math.max(4, Math.round(w * 0.2)), r = Math.round(h * 0.75), y = yb - r * 2 + 1;
     if (glow) alpha(0.25 + 0.15 * Math.sin(T * 4), () => { circle(cx, y + h / 2, w * 0.6, '#fff6b0'); });
@@ -395,7 +447,7 @@
   function rays() { for (let i = 0; i < 4; i++) alpha(0.08 + 0.04 * Math.sin(T + i), () => { const x = 40 + i * 70 - cam.cx * 0.2; for (let k = 0; k < 120; k++) R(x + k * 0.5 - 60, -90 + k, 10, 1, '#fff8c8'); }); }
 
   /* ---------- bubbles ---------- */
-  const WORD_C = { 'WOOF!': '#8a3a1a', 'RUFF!': '#8a3a1a', 'AWOO!': '#3a6ab8', 'HOO HOO!': '#6a4a30', '?': '#3a6ab8', 'ROAR!': '#7a2a1a', 'HSSS!': '#2a8a2a', 'SPLASH!': '#2a7ab8', 'CRUNCH!': '#a8742a', 'YUM!': '#e8222b', 'WOW!': '#d07010', 'BRRR!': '#3a6ab8' };
+  const WORD_C = { 'HOO!': '#6a4a30', 'WOOF!': '#8a3a1a', 'RUFF!': '#8a3a1a', 'AWOO!': '#3a6ab8', 'HOO HOO!': '#6a4a30', '?': '#3a6ab8', 'ROAR!': '#7a2a1a', 'HSSS!': '#2a8a2a', 'SPLASH!': '#2a7ab8', 'CRUNCH!': '#a8742a', 'YUM!': '#e8222b', 'WOW!': '#d07010', 'BRRR!': '#3a6ab8' };
   function bubble(word, ax, ay, age, big = false) {
     if (age < 0 || age > 1.6) return;
     const s = Math.max(1, Math.min(4, Math.round(Math.min(W, H) / (big ? 70 : 95))));
@@ -420,6 +472,7 @@
     'WOOF!'() { tone('square', 330, 0, 0.09, 0.08, 220); noise(0, 0.08, 0.05, 900, 1); },
     'RUFF!'() { tone('square', 280, 0, 0.08, 0.07, 200); tone('square', 300, 0.14, 0.08, 0.07, 210); },
     'AWOO!'() { tone('sine', 440, 0, 0.35, 0.08, 660); tone('sine', 660, 0.35, 0.9, 0.08, 520); },
+    'HOO!'() { tone('sine', 392, 0, 0.3, 0.09, 360); },
     'HOO HOO!'() { tone('sine', 392, 0, 0.25, 0.09, 370); tone('sine', 392, 0.4, 0.35, 0.09, 350); },
     '?'() { tone('sine', 600, 0, 0.18, 0.06, 900); },
     'ROAR!'() { tone('sawtooth', 110, 0, 0.9, 0.08, 80); noise(0, 0.9, 0.06, 300, 0.8); },
@@ -485,6 +538,7 @@
         fill(-8, '#6aa84a', 0); trail(0, 14); fill(14, '#5a9a42'); strokes(15, vis().y1, '#4a8a3a', 0.12, 4); fore(16, 'forest', 4);
         R(46, -26, 2, 26, '#7a5a3a'); R(36, -32, 22, 10, '#a87a4a'); R(37, -31, 20, 8, '#c99a5a');
         for (let k = 0; k < 6; k++) R(40 + k, -25 - k, 12 - 2 * k, 1, '#5a8a5a'); R(54, -28, 3, 3, '#5a3a22');
+        butterflies(10, 70, -4, 3, 1);
         vizsla(4, 8, 1, 1, { pose: t > 0.6 ? 'point' : 'stand' });
         husky(-44, 10, 1, 1, { pose: t > 1.6 && t < 3 ? 'howl' : 'stand', pant: t < 1.6 || t >= 3, wag: true });
       },
@@ -496,6 +550,8 @@
         forestSet(); rays();
         for (let i = 0; i < 3; i++) A.bird(((T * 26 + i * 110) % 500) - 100, -66 + i * 10, 1, T + i, '#3a4a3a');
         const x = walk(t, 3.6, 9, -40, 190);
+        butterflies(x - 40, x + 60, -8, 2, 2);
+        if (t > 5 && t < 7.4) squirrel(x + 30 - (t - 5) * 72, 22 - Math.abs(Math.sin(T * 14)) * 2, -1, { run: true });   // a squirrel scampers the other way
         husky(x - 52, 9, 1, 1, { run: true, step: step(), pant: true, wag: true, hop: Math.abs(Math.sin(T * 10)) });
         vizsla(x, 8, 1, 1, { run: true, step: 1 - step(), wag: true, hop: Math.abs(Math.sin(T * 10 + 1)) });
       },
@@ -520,14 +576,16 @@
       },
       words: [[12.1, '?', () => [6, -30]], [12.6, '?', () => [-26, -34]]],
     },
-    { a: 14.3, b: 16.2, sky: 'woods', // 5. the owl flaps away; the dogs trot on
+    { a: 14.3, b: 16.2, sky: 'woods', // 5. the owl swoops down to come along; the dogs trot on
       cam() { setCam(20, -30, 150, 100); },
+      words: [[15.3, 'HOO!', t => [lerp(26, walk(t, 14.8, 16.2, -30, 60) + 6, eout(seg(t, 14.4, 16))), -62]]],
       world(t) {
         forestSet();
-        const k = seg(t, 14.4, 16.2);
+        const k = eout(seg(t, 14.4, 16));
         owlTree(66, 30, vis().y0, 59, 2, -64);
-        owl(26 + k * 160, -65 - k * 50 - Math.sin(k * 9) * 4, 1, { fly: k > 0 });
         const x = walk(t, 14.8, 16.2, -30, 60);
+        if (k <= 0) owl(26, -65, 1, {});
+        else owl(lerp(26, x + 6, k), lerp(-65, -46, k) - Math.sin(k * Math.PI) * 10, 1, { fly: true, sc: k < 0.35 ? 1 : k < 0.7 ? 0.8 : 0.6 });
         husky(x - 52, 9, 1, 1, { run: t > 14.8, step: step(), pant: true });
         vizsla(x, 8, 1, 1, { run: t > 14.8, step: 1 - step() });
       },
@@ -550,11 +608,15 @@
         for (let i = 0; i < 26; i++) { const yy = 1 + (i * 7) % 40, hw = 48 + yy * 0.12, x = -hw + ((i * 37 + T * 30) % (hw * 2 - 6)); R(x, yy, 6, 1, '#9ad0f0'); }
         for (const sx0 of this.stones) { ellipse(sx0, 9, 8, 3, '#8a8a92'); ellipse(sx0 - 1, 8, 6, 2, '#aaaab2'); }
         const [hx, hh] = this.hopX(t, 16.4), [vx, vh] = this.hopX(t, 17.3);
+        owlFly((hx + vx) / 2 + 12, -50);
         const shaking = t > 20.2 && t < 21.4, jit = shaking ? (Math.floor(T * 30) % 2 ? 1 : -1) : 0;
         vizsla(vx, 6 - vh, 1, 1, { pose: t > 20.4 ? 'tilt' : 'stand', wet: t > 20.4, step: vh > 0 ? 1 : 0 });
         husky(hx + jit, 6 - hh, 1, 1, { pant: !shaking, step: hh > 0 ? 1 : 0, wag: shaking });
+        const fk = seg(t, 17.9, 18.8);   // a fish leaps in the open water ahead
+        if (fk > 0 && fk < 1) fish(lerp(24, 42, fk), 20 - Math.sin(fk * Math.PI) * 30, fk < 0.5);
       },
       upd(t) {
+        for (const ti of [17.9, 18.8]) if (t >= ti && t - 1 / 30 < ti) spawn(10, () => ({ x: sx(ti < 18 ? 24 : 42), y: sy(18), vx: rand(-50, 50), vy: rand(-90, -30), g: 220, life: 0.6, max: 0.6, s: Math.max(1, cam.z), c: Math.random() < 0.5 ? '#bfe6ff' : '#ffffff' }));
         if (t > 20.2 && t < 21.4) { const [hx] = this.hopX(t, 16.4); spawn(3, () => ({ x: sx(hx + rand(-12, 12)), y: sy(-14 + rand(-6, 6)), vx: rand(-90, 90), vy: rand(-80, -20), g: 200, life: 0.6, max: 0.6, s: Math.max(1, cam.z), c: Math.random() < 0.5 ? '#8ec8f0' : '#ffffff' })); }
         for (const t0 of [16.4, 17.3]) for (let i = 0; i < 4; i++) { const ti = t0 + 2.4 * (i + 1) / 5; if (t >= ti && t - 1 / 60 < ti) spawn(6, () => ({ x: sx(this.stones[i]), y: sy(6), vx: rand(-40, 40), vy: rand(-60, -20), g: 200, life: 0.5, max: 0.5, s: Math.max(1, cam.z), c: '#bfe6ff' })); }
       },
@@ -577,13 +639,15 @@
       world(t) {
         forestSet();
         const j = Math.sin(seg(t, 25.5, 26.2) * Math.PI) * 10, back = eout(seg(t, 25.5, 26.2)) * 12;
+        owlFly(-30 - back, -48 - j * 1.6);
         vizsla(-10 - back, 8, 1, 1, { hop: j, bark: t > 26.3 && t < 26.8 });
         husky(-58 - back, 9, 1, 1, { hop: j * 0.8, bark: t > 26.6 && t < 27.1 });
         bear(60, 12, -1, 1, {});
       },
       words: [[26.3, 'WOOF!', () => [0, -36]]],
     },
-    { a: 27.6, b: 30.6, sky: 'woods', // 9. the bear yawns, waves, and goes back to its berries; the dogs tiptoe past
+    { a: 27.6, b: 30.6, sky: 'woods', // 9. the bear yawns, waves and goes back to its berries (with the owl on its head); the dogs tiptoe past
+      words: [[30, 'HOO!', () => [70, -30]]],
       cam(t) { setCam(t < 29 ? 40 : Math.max(20, Math.min(60, walk(t, 28.8, 30.6, -70, 110) - 26)), -20, 170, 100); },
       world(t) {
         forestSet();
@@ -591,6 +655,9 @@
         if (!sitting) bear(40, 12, 1, 1, { stand: true, yawn: t < 28.6, wave: t >= 28.6 });
         else { bear(48, 12, 1, 1, {}); for (let i = 0; i < 5; i++) circle(80 + i * 4, 6 - (i % 2) * 3, 1, '#5a3aa8'); }
         for (const [bx, by, r] of [[78, 6, 10], [92, 8, 8]]) circle(bx, by, r, '#3a7a34');
+        const ok = seg(t, 29.2, 29.8);
+        if (ok < 1) owlFly(lerp(10, 70, ok), lerp(-58, -24, ok));
+        else owl(70, -17, 1, { sc: 0.6, blink: Math.floor(T * 1.5) % 4 === 0 });
         const x = walk(t, 28.8, 30.6, -70, 110);
         husky(x - 50, 26, 1, 1, { step: 1, pant: true });
         vizsla(x, 25, 1, 1, { step: 1 });
@@ -606,6 +673,7 @@
       words: [[31, 'HSSS!', () => [6, -28], true]],
     },
     { a: 33.2, b: 37.2, sky: 'day', // 11. the dogs hop back; the snake winks and wiggles away
+      words: [[34.3, 'HOO!', () => [-50, -66]]],
       cam(t) { setCam(t < 35.4 ? -24 : -24 + walk(t, 35.4, 37.2, 0, 60), -18, 160, 96); },
       world(t) {
         const v = vis();
@@ -615,11 +683,12 @@
         if (k <= 0) snake(10, 14, 1, { wink: t > 33.8 && t < 34 });
         else snake(10 + k * 140, 18, 1, { slither: true, go: k * 140 });
         const back = Math.sin(seg(t, 33.2, 33.8) * Math.PI) * 8, go = walk(t, 35.4, 37.2, 0, 60);
+        owlFly(-50 + go, -52);
         vizsla(-36 - (t < 33.8 ? back : 0) + go, 12, 1, 1, { hop: t < 33.8 ? back : 0, run: go > 0, step: step() });
         husky(-86 - (t < 33.8 ? back : 0) + go, 13, 1, 1, { hop: t < 33.8 ? back * 0.8 : 0, run: go > 0, step: 1 - step(), pant: true });
       },
     },
-    { a: 37.2, b: 44, sky: 'snow', // 12. up the mountain, from the trees through the rocks into the snow
+    { a: 37.2, b: 44, sky: 'snow', fx: 'snow', // 12. up the mountain, from the trees through the rocks into the snow
       gy: x => 30 - x * 0.5,
       dogX: t => walk(t, 37.3, 43.8, -110, 230),
       cam(t) { const x = this.dogX(t); setCam(x - 24, this.gy(x - 24) - 16, 150, 100); },
@@ -642,11 +711,12 @@
         for (let x = -150; x < 80; x += 26) { const top = this.gy(x); if (top > 0) pine(x + 8, top + 3, 20 + (x % 3) * 3, '#2f6a3a', '#3f7a44'); }
         for (let x = 60; x < 200; x += 34) { const top = this.gy(x); ellipse(x, top - 1, 6, 3, '#7a7a86'); ellipse(x - 1, top - 2, 4, 2, '#9a9aa6'); }
         const x = this.dogX(t), hx = x - 50;
+        owlFly(x - 18, this.gy(x) - 42);
         husky(hx, this.gy(hx) + 2, 1, 1, { run: true, step: step(), pant: true, wag: this.gy(hx) < -50 });
         vizsla(x, this.gy(x) + 2, 1, 1, { run: true, step: 1 - step(), wag: true });
       },
     },
-    { a: 44, b: 48.4, sky: 'snow', // 13. the snowy top: the husky plays in the snow, the Vizsla shivers, then spots something!
+    { a: 44, b: 48.4, sky: 'snow', fx: 'snow', // 13. the snowy top: the husky plays in the snow, the Vizsla shivers, then spots something!
       cam() { setCam(0, -24, 130, 84); },
       world(t) {
         const v = vis(); cloudRow(0.5, -70);
@@ -655,6 +725,9 @@
         husky(hx, 10, play ? (Math.cos(T * 3) > 0 ? 1 : -1) : 1, 1, { hop, pant: true, wag: true, run: play, step: step() });
         const shiver = t < 46 ? (Math.floor(T * 24) % 2) : 0;
         vizsla(22 + shiver, 9, 1, 1, { pose: t > 46.8 ? 'point' : 'stand' });
+        const up = seg(t, 46.9, 47.8);
+        if (up <= 0) owl(39 + shiver, -28, 1, { sc: 0.6, blink: Math.floor(T * 1.3) % 5 === 0 });
+        else owlFly(39 + up * 20, -28 - up * 26);
       },
       upd(t) { if (t < 46.6 && Math.random() < 0.5) spawn(2, () => ({ x: sx(Math.sin(T * 3) * 20 - 20 + rand(-8, 8)), y: sy(10), vx: rand(-40, 40), vy: rand(-60, -20), g: 120, life: 0.6, max: 0.6, s: Math.max(1, cam.z), c: '#ffffff' })); },
       words: [[45.2, 'BRRR!', () => [24, -38]], [47.2, 'WOW!', () => [30, -40], true]],
@@ -668,24 +741,30 @@
         for (let i = 0; i < 16; i++) { const fx = -150 + i * 22, fy = -10 + (i % 4) * 9; R(fx, fy, 2, 2, ['#ffd21f', '#ff6fb4', '#ffffff'][i % 3]); }
         bone(110, 6, 70, true);
         const x = walk(t, 49.4, 52.6, -150, 60);
+        butterflies(x - 60, x + 80, -6, 3, 3);
+        const hopAway = seg(t, 51.4, 52.6);
+        bunny(150 + hopAway * 60, 16 - Math.abs(Math.sin(hopAway * 12)) * 6 * (hopAway > 0 ? 1 : 0), 1, { up: t > 50.6 });
+        owlFly(Math.min(x + 44, 112), -46);
         husky(x - 52, 14, 1, 1, { run: true, step: step(), pant: true, hop: Math.abs(Math.sin(T * 12)) * 3 });
         vizsla(x, 12, 1, 1, { run: true, step: 1 - step(), hop: Math.abs(Math.sin(T * 12 + 1)) * 3 });
       },
       upd(t) { if (Math.random() < 0.3) sparkle(sx(110), sy(-8), 40 * cam.z / 2, 1, '#fff6b0'); },
     },
-    { a: 52.6, b: 60, sky: 'dusk', // 15. chomp! both ends of the giant bone, tails wagging, as the sun goes down
+    { a: 52.6, b: 60, sky: 'dusk', fx: 'fireflies', // 15. chomp! both ends of the giant bone, tails wagging, as the sun goes down
       cam(t) { const k = eout(seg(t, 56.6, 59)); setCam(0, -14 - k * 10, lerp(124, 190, k), lerp(64, 110, k)); },
       world(t) {
         const v = vis();
         circle(0, -40, 22, '#ffd27a'); circle(0, -40, 18, '#ffe6a0');
         hills(-30, 16, 0.03, 9, '#c49a7a'); fill(-16, '#8ab85a'); strokes(-14, v.y1, '#6a9a4a', 0.12, 10); fore(14, 'meadow', 10);
         bone(0, 6, 40, false);
-        const chomp = Math.floor(T * 5) % 2;
+        const chomp = Math.floor(T * 5) % 2, land = eout(seg(t, 52.8, 53.8));
+        if (land < 1) owlFly(lerp(-40, 0, land), lerp(-60, -6, land));
+        else owl(0, -3, 1, { sc: 0.6, hoot: t > 56.2 && t < 57 && Math.floor(T * 6) % 2, blink: Math.floor(T * 1.2) % 5 === 0 });
         vizsla(-36, 10 - chomp, 1, 1, { pose: 'chew', wag: true });
         husky(37, 11 - (1 - chomp), -1, 1, { pose: 'chew', wag: true });
       },
       upd(t) { if (Math.random() < 0.08) st.hearts.push({ x: rand(W * 0.3, W * 0.7), y: sy(-24), vy: -rand(14, 24) * cam.z, life: 1.6, r: Math.max(4, Math.round(cam.z * 3)) }); },
-      words: [[53.2, 'CRUNCH!', () => [-18, -26]], [54.8, 'CRUNCH!', () => [18, -26]], [57, 'YUM!', () => [0, -34], true]],
+      words: [[53.2, 'CRUNCH!', () => [-18, -26]], [54.8, 'CRUNCH!', () => [18, -26]], [56.2, 'HOO!', () => [0, -22]], [57.4, 'YUM!', () => [0, -34], true]],
     },
   ];
 
@@ -759,6 +838,12 @@
       g.setTransform(1, 0, 0, 1, 0, 0);
     },
     drawLit() {
+      const fx = shotAt(st.t).fx;
+      if (fx === 'snow') for (let i = 0; i < 40; i++) { const y = ((i * 53.7 + T * (18 + (i % 4) * 6)) % (H + 10)) - 5, x = ((i * 97.3 + Math.sin(T + i) * 8) % (W + 10)) - 5; R(x, y, i % 3 ? 1 : 2, i % 3 ? 1 : 2, '#ffffff'); }
+      if (fx === 'fireflies') for (let i = 0; i < 14; i++) {
+        const x = W * (0.5 + 0.45 * Math.sin(T * 0.3 + i * 1.7)), y = H * (0.3 + 0.3 * hsh(i) + 0.05 * Math.sin(T * 0.8 + i)), on = 0.5 + 0.5 * Math.sin(T * 3 + i * 2);
+        alpha(on * 0.35, () => circle(x, y, 3, '#fff27a')); alpha(on, () => R(x, y, 2, 2, '#fffbd0'));
+      }
       for (const h of st.hearts) alpha(Math.min(1, h.life), () => heart(Math.round(h.x), Math.round(h.y), h.r, '#e8222b'));
       drawParticles();
     },
