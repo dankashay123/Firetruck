@@ -793,7 +793,7 @@
   const STORY = [s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14];
 
   /* ---------- scene plumbing ---------- */
-  const st = { t: 0, done: false, s: -1, shot: -1, fired: {}, saved: null, rain: null, song: false };
+  const st = { t: 0, done: false, s: -1, shot: -1, fired: {}, saved: null, rain: null, paused: false, ui: 0, drag: null, wasPaused: false };
   function where(U) {
     let s = 0; for (let i = 0; i < STORY.length; i++) if (U >= SCENE_AT[i]) s = i;
     const sc = STORY[s], su = U - SCENE_AT[s];
@@ -801,13 +801,69 @@
     return { s, sc, su, shot: sc.shots[shot], shotI: shot };
   }
   function enter() {
-    Object.assign(st, { t: 0, done: false, s: -1, shot: -1, fired: {}, song: false });
+    Object.assign(st, { t: 0, done: false, s: -1, shot: -1, fired: {}, paused: false, ui: 0, drag: null });
     if (!st.saved) st.saved = clouds;
     clouds = [];
     loadSong();
   }
+  function stopSong() { if (song.src) { const src = song.src; song.src = null; try { src.stop(); } catch (e) {} } }
+  function startSong() {   // play the recording from wherever the story is now
+    if (!song.buf || !ac || song.src || st.paused || st.drag != null) return;
+    const off = st.t - INTRO;
+    if (off < 0 || off >= song.buf.duration - 0.05) return;
+    const src = ac.createBufferSource(); src.buffer = song.buf; src.connect(master);
+    song.t0 = ac.currentTime - off; src.start(0, off);
+    song.src = src; src.onended = () => { if (song.src === src) song.src = null; };
+    if (!SONG_PAGES) SONG_PAGES = Array.from({ length: NPAGES + 1 }, (_, k) => Math.min(k * PAGE, song.buf.duration * k / NPAGES));
+  }
+  /* ---------- player controls: pause, rewind, fast forward, drag the timeline ---------- */
+  function seek(t) {
+    stopSong();
+    st.t = Math.max(0, Math.min(endT() - 0.05, t));
+    st.fired = {}; parts = [];
+    setCamNow();
+  }
+  function pageStarts() { const a = [0]; for (let k = 0; k <= NPAGES; k++) a.push(pageT(k)); return a; }
+  function rewind() {
+    const a = pageStarts(); let i = a.length - 1;
+    while (i > 0 && a[i] > st.t - 1.2) i--;   // back to the start of this page, or the one before
+    seek(a[i]);
+  }
+  function forward() { const a = pageStarts(); const n = a.find(v => v > st.t + 0.05); seek(n != null ? n : endT() - 0.05); }
+  function togglePause() { st.paused = !st.paused; if (st.paused) stopSong(); }
+  function ctl() {   // layout of the controls (screen pixels)
+    const b = 26, gap = 10, cy = H - L.safeB - 30, cx = Math.round(W / 2);
+    const x0 = L.safeL + 44, x1 = W - L.safeR - 14;
+    return {
+      rew: { x: cx - b - gap - b / 2, y: cy - b / 2, s: b }, play: { x: cx - b / 2, y: cy - b / 2, s: b }, ff: { x: cx + b / 2 + gap, y: cy - b / 2, s: b },
+      track: { x0, x1, y: cy - b / 2 - 14 },
+    };
+  }
+  const tAtX = (c, x) => endT() * Math.max(0, Math.min(1, (x - c.track.x0) / (c.track.x1 - c.track.x0)));
+  function drawControls() {
+    const c = ctl(), k = Math.min(1, st.paused ? 1 : st.ui / 0.3);
+    if (k <= 0) return;
+    alpha(k, () => {
+      const { x0, x1, y } = c.track, w = x1 - x0;
+      alpha(0.45, () => R(x0 - 6, y - 8, w + 12, 16, BLACK));
+      R(x0, y - 1, w, 3, '#6a6478');
+      for (let p = 0; p <= NPAGES; p++) { const tx = Math.round(x0 + w * pageT(p) / endT()); R(tx, y - 3, 1, 7, '#cfc8dc'); }
+      const kx = Math.round(x0 + w * Math.min(1, st.t / endT()));
+      R(x0, y - 1, kx - x0, 3, '#ffd21f');
+      circle(kx, y, 5, '#ffffff'); circle(kx, y, 3, '#ffd21f');
+      for (const [key, b] of [['rew', c.rew], ['play', c.play], ['ff', c.ff]]) {
+        alpha(0.55, () => R(b.x, b.y, b.s, b.s, BLACK)); R(b.x + 1, b.y + 1, b.s - 2, 1, 'rgba(255,255,255,0.25)');
+        const mx = b.x + b.s / 2, my = b.y + b.s / 2, cw = '#ffffff';
+        const tri = (x, dir) => { for (let i = 0; i < 6; i++) R(dir > 0 ? x + i : x - i - 1, my - 6 + i, 1, 13 - 2 * i, cw); };
+        if (key === 'play') { if (st.paused) tri(mx - 3, 1); else { R(mx - 5, my - 6, 4, 13, cw); R(mx + 1, my - 6, 4, 13, cw); } }
+        else if (key === 'rew') { tri(mx, -1); tri(mx + 6, -1); }
+        else { tri(mx - 6, 1); tri(mx, 1); }
+      }
+    });
+  }
+  function setCamNow() { const w = where(uAt(st.t)); w.shot.cam.call(w.shot, w.su); }
   function leave() {
-    if (song.src) { try { song.src.stop(); } catch (e) {} song.src = null; }
+    stopSong();
     if (st.rain) st.rain(0);
     if (st.saved) { clouds = st.saved; st.saved = null; }
   }
@@ -818,26 +874,26 @@
   }
   function update(dt) {
     if (st.done) return;
+    st.ui = Math.max(0, st.ui - dt);
+    if (st.paused || st.drag != null) {   // hold the picture still (it keeps breathing) and stay quiet
+      if (st.rain) st.rain(0);
+      setCamNow();
+      return;
+    }
     if (song.src) st.t = INTRO + (ac.currentTime - song.t0);
     else st.t += dt;
-    if (!song.src && !st.song && song.buf && ac && st.t >= INTRO - 0.02 && st.t < INTRO + 0.5) {
-      st.song = true;
-      const src = ac.createBufferSource(); src.buffer = song.buf; src.connect(master);
-      song.t0 = ac.currentTime - (st.t - INTRO); src.start(0, Math.max(0, st.t - INTRO));
-      song.src = src; src.onended = () => { if (song.src === src) song.src = null; };
-      if (!SONG_PAGES) SONG_PAGES = Array.from({ length: NPAGES + 1 }, (_, k) => Math.min(k * PAGE, song.buf.duration * k / NPAGES));
-    }
+    startSong();
     const U = uAt(st.t), w = where(U);
     if (w.s !== st.s || w.shotI !== st.shot) { st.s = w.s; st.shot = w.shotI; }
     // bubbles' noises, numbers and extra sounds
     (w.sc.words || []).forEach(([u, word], i) => { const key = w.s + 'w' + i; if (w.su >= u && w.su < u + 0.3 && !st.fired[key]) { st.fired[key] = true; sound(word); } });
-    (w.sc.numbers || []).forEach(([u], i) => { const key = w.s + 'n' + i; if (w.su >= u && !st.fired[key]) { st.fired[key] = true; if (!singing()) tone('sine', 523 + i * 131, 0, 0.25, 0.08); } });
-    (w.sc.noises || []).forEach(([u, n], i) => { const key = w.s + 'x' + i; if (w.su >= u && !st.fired[key]) { st.fired[key] = true; if (SOUND[n]) SOUND[n](); } });
+    (w.sc.numbers || []).forEach(([u], i) => { const key = w.s + 'n' + i; if (w.su >= u && w.su < u + 0.3 && !st.fired[key]) { st.fired[key] = true; if (!singing()) tone('sine', 523 + i * 131, 0, 0.25, 0.08); } });
+    (w.sc.noises || []).forEach(([u, n], i) => { const key = w.s + 'x' + i; if (w.su >= u && w.su < u + 0.3 && !st.fired[key]) { st.fired[key] = true; if (SOUND[n]) SOUND[n](); } });
     if (!st.rain) st.rain = noiseLoop(2600, 0.4);
     st.rain(w.sc.rain ? w.sc.rain * 0.05 : 0);
     w.shot.cam.call(w.shot, w.su);
     if (w.sc.upd) w.sc.upd(w.su);
-    if (st.t >= endT()) finish();
+    if (st.t >= endT() - 0.06) finish();
   }
   function iris(k, cx, cy) {
     if (k >= 1) return;
@@ -887,14 +943,26 @@
       const bx = L.safeL + 8, bw = W - L.safeL - L.safeR - 16, by = H - L.safeB - 5;
       alpha(0.35, () => R(bx, by, bw, 2, BLACK));
       alpha(0.85, () => R(bx, by, Math.round(bw * clamp01(st.t / endT())), 2, '#fff6e0'));
+      drawControls();
       drawHomeButton(homeBtn());
     },
-    tap(x, y) {
+    tap(x, y, id) {
       if (inBox(homeBtn(), x, y)) { SFX.boop(); finish(); return true; }
+      const c = ctl(), shown = st.paused || st.ui > 0;
+      if (shown) {
+        st.ui = 3.5;
+        if (inBox(c.play, x, y, 6)) { togglePause(); return true; }
+        if (inBox(c.rew, x, y, 6)) { rewind(); return true; }
+        if (inBox(c.ff, x, y, 6)) { forward(); return true; }
+        if (x >= c.track.x0 - 10 && x <= c.track.x1 + 10 && Math.abs(y - c.track.y) <= 14) { st.drag = id; seek(tAtX(c, x)); return true; }
+      }
+      st.ui = 3.5;   // any other tap brings up the controls for a moment
       sparkle(x, y, 4, 3, '#ffffff');
       return true;
     },
+    move(x, y, id) { if (st.drag === id) { st.ui = 3.5; seek(tAtX(ctl(), x)); } },
+    release(id) { if (st.drag === id) { st.drag = null; st.ui = 3.5; } },
     // test hooks
-    _st: st, _jump(U) { st.t = tAtU(U); },
+    _st: st, _jump(U) { st.t = tAtU(U); }, _ctl: () => ctl(), _song: () => ({ loaded: !!song.buf, playing: !!song.src, at: song.src ? +(ac.currentTime - song.t0).toFixed(2) : null }),
   };
 })();
