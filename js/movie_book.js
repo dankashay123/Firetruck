@@ -816,28 +816,17 @@
     song.src = src; src.onended = () => { if (song.src === src) song.src = null; };
     if (!SONG_PAGES) SONG_PAGES = Array.from({ length: NPAGES + 1 }, (_, k) => Math.min(k * PAGE, song.buf.duration * k / NPAGES));
   }
-  /* ---------- player controls: pause, rewind, fast forward, drag the timeline ---------- */
+  /* ---------- player controls: pause and a draggable timeline ---------- */
   function seek(t) {
     stopSong();
     st.t = Math.max(0, Math.min(endT() - 0.05, t));
     st.fired = {}; parts = [];
     setCamNow();
   }
-  function pageStarts() { const a = [0]; for (let k = 0; k <= NPAGES; k++) a.push(pageT(k)); return a; }
-  function rewind() {
-    const a = pageStarts(); let i = a.length - 1;
-    while (i > 0 && a[i] > st.t - 1.2) i--;   // back to the start of this page, or the one before
-    seek(a[i]);
-  }
-  function forward() { const a = pageStarts(); const n = a.find(v => v > st.t + 0.05); seek(n != null ? n : endT() - 0.05); }
   function togglePause() { st.paused = !st.paused; if (st.paused) stopSong(); }
   function ctl() {   // layout of the controls (screen pixels)
-    const b = 26, gap = 10, cy = H - L.safeB - 30, cx = Math.round(W / 2);
-    const x0 = L.safeL + 44, x1 = W - L.safeR - 14;
-    return {
-      rew: { x: cx - b - gap - b / 2, y: cy - b / 2, s: b }, play: { x: cx - b / 2, y: cy - b / 2, s: b }, ff: { x: cx + b / 2 + gap, y: cy - b / 2, s: b },
-      track: { x0, x1, y: cy - b / 2 - 14 },
-    };
+    const b = 26, cy = H - L.safeB - 30, cx = Math.round(W / 2), half = Math.round(Math.min(W - L.safeL - L.safeR - 32, 360) / 2);
+    return { play: { x: cx - b / 2, y: cy - b / 2, s: b }, track: { x0: cx - half, x1: cx + half, y: cy - b / 2 - 14 } };
   }
   const tAtX = (c, x) => endT() * Math.max(0, Math.min(1, (x - c.track.x0) / (c.track.x1 - c.track.x0)));
   function drawControls() {
@@ -851,13 +840,11 @@
       const kx = Math.round(x0 + w * Math.min(1, st.t / endT()));
       R(x0, y - 1, kx - x0, 3, '#ffd21f');
       circle(kx, y, 5, '#ffffff'); circle(kx, y, 3, '#ffd21f');
-      for (const [key, b] of [['rew', c.rew], ['play', c.play], ['ff', c.ff]]) {
+      for (const [key, b] of [['play', c.play]]) {
         alpha(0.55, () => R(b.x, b.y, b.s, b.s, BLACK)); R(b.x + 1, b.y + 1, b.s - 2, 1, 'rgba(255,255,255,0.25)');
         const mx = b.x + b.s / 2, my = b.y + b.s / 2, cw = '#ffffff';
         const tri = (x, dir) => { for (let i = 0; i < 6; i++) R(dir > 0 ? x + i : x - i - 1, my - 6 + i, 1, 13 - 2 * i, cw); };
         if (key === 'play') { if (st.paused) tri(mx - 3, 1); else { R(mx - 5, my - 6, 4, 13, cw); R(mx + 1, my - 6, 4, 13, cw); } }
-        else if (key === 'rew') { tri(mx, -1); tri(mx + 6, -1); }
-        else { tri(mx - 6, 1); tri(mx, 1); }
       }
     });
   }
@@ -952,8 +939,6 @@
       if (shown) {
         st.ui = 3.5;
         if (inBox(c.play, x, y, 6)) { togglePause(); return true; }
-        if (inBox(c.rew, x, y, 6)) { rewind(); return true; }
-        if (inBox(c.ff, x, y, 6)) { forward(); return true; }
         if (x >= c.track.x0 - 10 && x <= c.track.x1 + 10 && Math.abs(y - c.track.y) <= 14) { st.drag = id; seek(tAtX(c, x)); return true; }
       }
       st.ui = 3.5;   // any other tap brings up the controls for a moment

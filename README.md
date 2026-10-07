@@ -21,7 +21,7 @@ There is no way to lose and nothing to read.
 ## Code layout
 - `js/core.js`: shared engine (canvas, sprites, sound, day/night sky, scene system, input).
 - `js/station.js`, `js/fire.js`, `js/help.js`, `js/amb.js`, `js/police.js`: one file per scene, each registering `SCENES.<name>`.
-- `js/book_art.js`, `js/movie_book.js`: the *Little Blue Truck* sing-along. The story runs one beat per sung page; a parent's recording in `audio/movie-book.mp3` (one take, a short pause at each page turn) plays along when present, and the page start times go in `SONG_PAGES`. Without it the cartoon plays with little beeps and animal noises. Tap the picture for the player controls: rewind and fast forward jump a page at a time, the middle button pauses, and the timeline (one tick per page) can be dragged.
+- `js/book_art.js`, `js/movie_book.js`: the *Little Blue Truck* sing-along. The story runs one beat per sung page; a parent's recording in `audio/movie-book.mp3` (one take, a short pause at each page turn) plays along when present, and the page start times go in `SONG_PAGES`. Without it the cartoon plays with little beeps and animal noises. Tap the picture for the player controls: a pause button and a timeline (one tick per page) that can be dragged.
 - `js/main.js`: boot and main loop. `index.html#fire` (or `#help`, `#amb`, `#police`) jumps straight into a scene after Play.
 
 ## Run it
