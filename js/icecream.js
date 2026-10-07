@@ -188,7 +188,9 @@
       d.hop = Math.max(0, d.hop - dt * 30); d.bark = Math.max(0, d.bark - dt);
     };
     chase(dogs.vizsla, b.x, -b.vx > 0 ? 8 : -8);
-    chase(dogs.husky, dogs.vizsla.x, (dogs.vizsla.dir > 0 ? -22 : 22) * dogK());
+    chase(dogs.husky, dogs.vizsla.x, (dogs.vizsla.dir > 0 ? -28 : 28) * dogK());
+    const gap = 24 * dogK(), dd = dogs.husky.x - dogs.vizsla.x;   // never stand on top of each other
+    if (Math.abs(dd) < gap) dogs.husky.x = dogs.vizsla.x + (dd >= 0 ? gap : -gap);
     for (const h of hearts) { h.life -= dt; h.y += h.vy * dt; }
     hearts = hearts.filter(h => h.life > 0);
   }
@@ -212,11 +214,11 @@
     // a striped awning with a scalloped edge
     for (let i = 0; i < 8; i++) { P(54 + i * 4, 5, 4, 5, i % 2 ? '#ffffff' : '#e8222b'); circle(x + 56 + i * 4, top + 10, 2, i % 2 ? '#ffffff' : '#e8222b'); }
     // the menu board: all ten treats (the one being asked for flashes)
-    P(4, 8, 49, 37, '#5a3a2a'); P(5, 9, 47, 35, '#fff2d8');
+    P(4, 5, 50, 41, '#5a3a2a'); P(5, 6, 48, 39, '#fff2d8');
     const c0 = st.q[0], want = c0 && c0.state === 'wait' && !c0.dog && !st.fly ? c0.want : -1;
     TREATS.forEach((t, i) => {
-      const mx = x + 6 + (i % 5) * 9, my = top + 27 + Math.floor(i / 5) * 17;
-      if (i === want && Math.floor(T * 4) % 2) R(mx - 1, my - 18, 11, 19, '#ffd21f');
+      const mx = x + 11 + (i % 5) * 9, my = top + 27 + Math.floor(i / 5) * 17;   // treat() centers on mx
+      if (i === want && Math.floor(T * 4) % 2) R(mx - 5, my - 20, 10, 21, '#ffd21f');
       treat(t, mx, my, 1);
     });
     // the giant cone on the roof, and a loudspeaker
@@ -235,14 +237,14 @@
     for (let x = 6; x < W + 10; x += 34) drawTree(x + (x * 13) % 9, Y.hz + 6, 9 + (x % 3));
     R(Math.round(W * 0.82), Y.hz - 12, 22, 16, '#f2d16b'); for (let k = 0; k < 12; k++) R(Math.round(W * 0.82) - 2 + k, Y.hz - 13 - k, 26 - 2 * k, 1, '#c8432f');
     R(Math.round(W * 0.82) + 8, Y.hz - 4, 6, 8, '#8a5a3a');
-    if (!Y.big) drawDogs();   // no lawn in front: they play behind the truck
+    if (!Y.big) { parkLife(); drawDogs(); }   // no lawn in front: they play behind the truck
     // the road the truck parks on, then the sidewalk the customers stand on
     R(0, Y.yG - 18, W, 12, '#5b5f6b'); for (let x = 2; x < W; x += 14) R(x, Y.yG - 13, 7, 1, '#ffd21f');
     R(0, Y.yG - 6, W, 11, '#d8d2c4'); R(0, Y.yG - 6, W, 1, '#b5ae9f'); for (let x = 0; x < W; x += 16) R(x, Y.yG - 6, 1, 11, '#c4bdaf');
     R(0, Y.lawn, W, H - Y.lawn, '#6cbf5a');
     for (let i = 0; i < 40; i++) { const fx = (i * 53) % W, fy = Y.lawn + 4 + (i * 29) % Math.max(4, H - Y.lawn - 6); R(fx, fy, 2, 1, ['#ffd21f', '#ff6fb4', '#ffffff', '#7cc96a', '#7cc96a'][i % 5]); }
   }
-  function dogY() { return Y.big ? Math.round(Y.lawn + (H - L.safeB - Y.lawn) * 0.6) : Y.hz + 16; }
+  function dogY() { return Y.big ? Math.round(Y.lawn + (H - L.safeB - Y.lawn) * 0.4) : Y.hz + 16; }
   const dogK = () => Y.big ? 2 : 1;
   function drawDogs() {
     const y = dogY(), b = st.ball, k = dogK();
@@ -255,31 +257,74 @@
     }
     g.restore();
   }
+  /* a picnic on a blanket, a kite flying high: life in the park */
+  const PICNIC = [{ type: 'mom', skin: SKIN[2], treat: 1, dir: 1, dx: 7, seed: 1 }, { type: 'kid3', skin: SKIN[0], treat: 0, dir: -1, dx: 33, seed: 4 }];
+  function sitterHand(p, x, yb) {   // where the hand is in the 'eat' pose (alternates mouth / lap)
+    const o = OUTFITS[p.type], tY = 9, torsoH = o.child ? 5 : 7, top = yb - (tY + torsoH), ph = Math.floor(T * 5 + p.seed) % 2, bx = x - 6;
+    const hx = ph ? 9 : 12, hy = ph ? 9 : tY + 3;
+    return [p.dir > 0 ? bx + hx : bx + 12 - hx, top + hy];
+  }
+  function picnic(x0, yb, k) {   // x0, yb in screen pixels; drawn k times bigger when it's close
+    g.save(); g.translate(Math.round(x0), Math.round(yb)); g.scale(k, k);
+    // the blanket (red and white checks, seen from the side)
+    for (let i = 0; i < 10; i++) for (let j = 0; j < 2; j++) R(i * 4, -6 + j * 3, 4, 3, (i + j) % 2 ? '#ffffff' : '#e8222b');
+    R(0, 0, 40, 1, '#a3121d');
+    for (const p of PICNIC) {
+      drawPerson({ type: p.type, x: p.dx, yb: -3, dir: p.dir, pose: 'eat', skin: p.skin, seed: p.seed });
+      const [hx, hy] = sitterHand(p, p.dx, -3);
+      treat(TREATS[p.treat], hx, hy + 6, 1);
+    }
+    // the basket, with a baguette poking out
+    R(16, -9, 9, 6, '#b07a34'); R(16, -9, 9, 1, '#8a5a24'); R(17, -12, 7, 1, '#8a5a24'); R(17, -12, 1, 3, '#8a5a24'); R(23, -12, 1, 3, '#8a5a24');
+    R(18, -13, 2, 4, '#e8c07a'); R(21, -11, 2, 2, '#e8222b');
+    g.restore();
+  }
+  function kite(kx, kyb, k) {   // a kid flying a kite; the kite dances in the sky
+    g.save(); g.translate(Math.round(kx), Math.round(kyb)); g.scale(k, k);
+    drawPerson({ type: 'kid2', x: 0, yb: 0, dir: -1, pose: 'cheer', skin: SKIN[1], seed: 3 });
+    g.restore();
+    const hx = kx - 3 * k, hy = kyb - 20 * k;
+    const tx = Math.round(Math.max(L.safeL + 20, kx - 34 + Math.sin(T * 0.7) * 10)), ty = Math.round(L.safeT + 18 + Math.sin(T * 1.1) * 5);
+    for (let i = 0; i <= 24; i++) { const f = i / 24; R(lerp(hx, tx, f), lerp(hy, ty + 8, f) + Math.sin(f * Math.PI) * 8, 1, 1, '#5a5a66'); }
+    for (let r = 0; r < 6; r++) { R(tx - r, ty + r, 2 * r + 1, 1, r < 3 ? '#ff6fb4' : '#ffd21f'); R(tx - (5 - r), ty + 6 + r, 2 * (5 - r) + 1, 1, r < 3 ? '#2a6fe0' : '#3fb43a'); }
+    for (let i = 0; i < 5; i++) R(tx + Math.round(Math.sin(T * 4 + i) * 1.5), ty + 12 + i * 2, 1, 2, i % 2 ? '#e8222b' : '#ffd21f');   // the tail
+  }
+  function parkLife() {
+    if (Y.big) {
+      const yb = H - L.safeB - 4, k = 2;
+      picnic(Math.round(Math.max(L.safeL + 30, L.cx - 46)), yb, k);
+      kite(W - L.safeR - 10, yb, k);
+    } else {
+      const free = W - L.safeR - (Y.tx + Y.TW);   // grass to the right of the truck
+      if (free >= 58) { picnic(W - L.safeR - 52, Y.hz + 22, 1); kite(W - L.safeR - 6, Y.hz + 20, 1); }
+    }
+  }
   function customer(c) {
     const leaving = c.state === 'leave', dir = leaving ? -1 : -1, yb = Y.yG + 2;
     if (c.dog) {
       const lick = (c.state === 'happy' || leaving) && Math.floor(T * 4) % 2;
       DOGDRAW[c.dog](c.x, yb - (c.dog === 'husky' ? 1 : 0), -1, { run: c.state === 'come' || leaving, hop: c.hop, wag: true, lick, pant: c.dog === 'husky' && !lick });
-      if (c.got) treat(c.got, c.x - 13, yb, 1);
+      if (c.got) treat(c.got, c.x - 10, yb, 1);
       return;
     }
     const walking = c.state === 'come' || leaving;
     drawPerson({ type: c.type, x: c.x, yb, dir, walk: walking, pose: c.state === 'happy' ? 'cheer' : 'stand', skin: c.skin, seed: c.seed, hop: c.hop });
-    if (c.got) treat(c.got, handX(c) - 4, handY(c) + (c.state === 'happy' ? -2 : 0) + (leaving && Math.floor(T * 3) % 2 ? -1 : 0), 1);
+    if (c.got) treat(c.got, handX(c), handY(c) + (c.state === 'happy' ? -2 : 0) + (leaving && Math.floor(T * 3) % 2 ? -1 : 0), 1);
   }
   function wantBubble(c) {   // what the front customer is dreaming of, drawn big
     if (!c || c.state !== 'wait' || st.fly) return;
     const t = c.dog ? PUP : TREATS[c.want], k = 2, bw = 26, bh = 40;
     const top = (c.dog ? Y.yG - 18 : Y.yG + 2 - personH(c.type)) - bh - 6;
-    const side = Y.coneK === 1 || top < L.safeT + 2;   // no room above: float it beside the customer instead
+    const side = c.x + 9 + bw <= W - L.safeR - 2 || top < L.safeT + 2;   // beside the head (clear of the window) when it fits
     const bx = Math.round(side ? Math.min(W - L.safeR - bw - 2, c.x + 9) : Math.min(W - L.safeR - bw - 2, c.x - 2));
-    const by = Math.round(side ? Math.max(L.safeT + 2, Y.yG - bh - 6) : top), pop = Math.min(1, c.t / 0.25);
+    const headY = c.dog ? Y.yG - 14 : Y.yG + 2 - personH(c.type);
+    const by = Math.round(side ? Math.max(L.safeT + 2, headY - bh + 10) : top), pop = Math.min(1, c.t / 0.25);
     if (pop <= 0) return;
     R(bx, by + 1, bw, bh - 2, INK); R(bx + 1, by, bw - 2, bh, INK);
     R(bx + 1, by + 1, bw - 2, bh - 2, '#ffffff');
-    if (side) { R(bx - 3, by + bh - 12, 2, 2, '#ffffff'); R(bx - 6, by + bh - 9, 2, 2, '#ffffff'); }
-    else { R(c.x - 2, by + bh, 3, 2, '#ffffff'); R(c.x - 4, by + bh + 3, 2, 2, '#ffffff'); }
-    treat(t, bx + Math.round(bw / 2) - 9, by + bh - 4 + Math.round(Math.sin(T * 5)), k);
+    if (side) { R(bx - 3, by + bh - 9, 2, 2, INK); R(bx - 2, by + bh - 8, 1, 1, '#ffffff'); R(bx - 6, by + bh - 6, 2, 2, INK); }
+    else { R(c.x - 2, by + bh, 3, 2, INK); R(c.x - 4, by + bh + 3, 2, 2, INK); }
+    treat(t, bx + Math.round(bw / 2), by + bh - 4 + Math.round(Math.sin(T * 5)), k);
     if (Math.floor(T * 1.5) % 2 === 0) sparkleDot(bx + bw - 4, by + 4);
   }
   function sparkleDot(x, y) { R(x, y - 1, 1, 3, '#ffd21f'); R(x - 1, y, 3, 1, '#ffd21f'); }
@@ -301,12 +346,12 @@
     drawWorld() {
       park();
       truck();
-      if (Y.big) drawDogs();
+      if (Y.big) { parkLife(); drawDogs(); }
       for (const c of st.leaving) customer(c);
       for (let i = st.q.length - 1; i >= 0; i--) customer(st.q[i]);
       if (st.fly) {
         const f = st.fly, k = eout(clamp01(f.k));
-        treat(f.t, lerp(f.x0, f.x1, k) - 4, lerp(f.y0, f.y1, k) - Math.sin(k * Math.PI) * 18, 1);
+        treat(f.t, lerp(f.x0, f.x1, k), lerp(f.y0, f.y1, k) - Math.sin(k * Math.PI) * 18, 1);
       }
     },
     drawLit() {
