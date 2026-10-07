@@ -12,135 +12,281 @@
   const hsh = A.hsh;
   const END = 60;
 
-  /* ---------- the cast ---------- */
-  function dlegs(P, xs, top, h, w, c, o, paw) {
-    xs.forEach((lx, i) => {
-      let dx = 0, dy = 0;
-      if (o.run) { const k = (i + (o.step || 0)) % 2; dx = k ? 1 : -1; dy = k ? -1 : 0; }
-      else if (o.step && i % 2) dy = -1;
-      P(lx + dx, top, w, h + dy, c);
-      if (paw) P(lx + dx, top + h + dy - 1, w + 1, 1, paw);
-    });
+  /* ---------- the cast, painted with smooth shapes and baked into crisp pixel sprites ---------- */
+  // Each sprite is drawn with canvas paths in world units, rasterized at the screen's own pixel
+  // size (Q pixels per world unit), snapped to its little palette and given a dark outline.
+  const BAKED = new Map();
+  const hex = c => [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
+  function bake(key, bw, bh, Q, pal, outline, draw) {
+    const id = key + '@' + Q;
+    let cv = BAKED.get(id);
+    if (cv) return cv;
+    cv = document.createElement('canvas');
+    cv.width = Math.ceil(bw * Q) + 4; cv.height = Math.ceil(bh * Q) + 4;
+    const c = cv.getContext('2d');
+    c.setTransform(Q, 0, 0, Q, cv.width / 2, cv.height - 2);
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    draw(c);
+    const img = c.getImageData(0, 0, cv.width, cv.height), d = img.data, n = cv.width * cv.height;
+    const P = pal.map(hex), O = hex(outline), solid = new Uint8Array(n);
+    for (let i = 0; i < n; i++) {
+      const a = d[i * 4 + 3];
+      if (a < 110) { d[i * 4 + 3] = 0; continue; }
+      const r = d[i * 4] * 255 / a, gg = d[i * 4 + 1] * 255 / a, b = d[i * 4 + 2] * 255 / a;
+      let best = P[0], bd = 1e9;
+      for (const p of P) { const dd = (p[0] - r) ** 2 + (p[1] - gg) ** 2 + (p[2] - b) ** 2; if (dd < bd) { bd = dd; best = p; } }
+      d[i * 4] = best[0]; d[i * 4 + 1] = best[1]; d[i * 4 + 2] = best[2]; d[i * 4 + 3] = 255; solid[i] = 1;
+    }
+    const w = cv.width;
+    for (let i = 0; i < n; i++) {
+      if (solid[i]) continue;
+      const x = i % w;
+      if ((x > 0 && solid[i - 1]) || (x < w - 1 && solid[i + 1]) || solid[i - w] || solid[i + w]) { d[i * 4] = O[0]; d[i * 4 + 1] = O[1]; d[i * 4 + 2] = O[2]; d[i * 4 + 3] = 255; }
+    }
+    c.putImageData(img, 0, 0);
+    if (BAKED.size > 600) BAKED.clear();
+    BAKED.set(id, cv);
+    return cv;
   }
-  // the red Vizsla, 44 long. o: { pose: stand|point|tilt|chew, run, step, hop, bark, wag, wet }
+  // Draw a baked sprite with its feet at world (x, yb), using whatever zoom the canvas has right now.
+  function stamp(key, bw, bh, pal, outline, draw, x, yb, dir = 1) {
+    const m = g.getTransform(), z = Math.max(1, Math.round(m.a));
+    const Q = z <= 3 ? z : z % 3 === 0 ? 3 : z % 2 === 0 ? 2 : 3, k = z / Q;
+    const cv = bake(key, bw, bh, Q, pal, outline, draw);
+    const px = Math.round(m.a * x + m.e), py = Math.round(m.d * yb + m.f);
+    const dw = Math.round(cv.width * k), dh = Math.round(cv.height * k);
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.imageSmoothingEnabled = false;
+    if (dir < 0) { g.translate(px, 0); g.scale(-1, 1); g.drawImage(cv, -Math.round(dw / 2), py - dh + Math.round(2 * k), dw, dh); }
+    else g.drawImage(cv, px - Math.round(dw / 2), py - dh + Math.round(2 * k), dw, dh);
+    g.restore();
+  }
+  // little path helpers (c = the 2d context, units = world pixels)
+  const E = (c, x, y, rx, ry, col, rot = 0) => { c.fillStyle = col; c.beginPath(); c.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2); c.fill(); };
+  const poly = (c, pts, col) => { c.fillStyle = col; c.beginPath(); c.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) c.lineTo(pts[i][0], pts[i][1]); c.closePath(); c.fill(); };
+  const line = (c, pts, w, col) => { c.strokeStyle = col; c.lineWidth = w; c.beginPath(); c.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) c.lineTo(pts[i][0], pts[i][1]); c.stroke(); };
+  const curve = (c, cmds, col, fillIt = true, w = 1) => {   // cmds: ['M',x,y] ['Q',cx,cy,x,y] ['L',x,y]
+    c.beginPath();
+    for (const [op, ...a] of cmds) op === 'M' ? c.moveTo(...a) : op === 'Q' ? c.quadraticCurveTo(...a) : op === 'Z' ? c.closePath() : c.lineTo(...a);
+    if (fillIt) { c.closePath(); c.fillStyle = col; c.fill(); } else { c.strokeStyle = col; c.lineWidth = w; c.stroke(); }
+  };
+  // a dog's leg from the shoulder/hip to the paw, swinging with the gait
+  function gait(o) {
+    const run = !!o.run, walk = !run && o.step != null, frames = 8;
+    const f = run ? Math.floor(((T * 2.4) % 1) * frames) : walk ? Math.floor(((T * 1.4) % 1) * frames) : 0;
+    return { f, amp: run ? 5 : walk ? 2.6 : 0, lift: run ? 3 : walk ? 1.6 : 0, ph: f / frames };
+  }
+  function legPts(front, sx0, sy0, gp, off, thick) {
+    const a = (gp.ph + off) * Math.PI * 2, sw = Math.sin(a) * gp.amp, lf = Math.max(0, Math.cos(a)) * gp.lift;
+    if (front) {
+      const paw = [sx0 + 1 + sw, -lf], elbow = [sx0 - 0.5 + sw * 0.3, sy0 + 6 - lf * 0.4], past = [paw[0] - 0.4, -2.4 - lf];
+      return [[sx0, sy0], elbow, past, paw, [paw[0] + thick * 0.55, -lf]];
+    }
+    const paw = [sx0 - 1.5 + sw, -lf], knee = [sx0 + 2.6 + sw * 0.3, sy0 + 6.5 - lf * 0.5], hock = [paw[0] - 2.2, -4.6 - lf * 0.8];
+    return [[sx0, sy0], knee, hock, paw, [paw[0] + thick * 0.55, -lf]];
+  }
+  function drawLeg(c, pts, wTop, wLow, col, pawCol) {
+    line(c, pts.slice(0, 2), wTop, col);
+    line(c, pts.slice(1, 4), wLow, col);
+    line(c, pts.slice(3, 5), wLow * 0.95, pawCol || col);
+  }
+
+  /* the red Vizsla: lean and leggy, deep chest, long muzzle, big soft ear, amber eyes */
+  const VZ = { V1: '#b4542a', V2: '#cf7040', V3: '#8e3c1a', V4: '#6e2c12', EAR: '#9a4420', NOSE: '#b86f62', EYE: '#e0a040', INK: '#22222a', COL: '#3d4a3a', RING: '#cfd6dd', TNG: '#e8708a', MTH: '#5a1a10', W: '#ffffff' };
+  const VZ_PAL = Object.values(VZ);
+  // o: { pose: stand|point|tilt|chew, run, step, hop, bark, wag, wet }
   function vizsla(x, yb, dir = 1, s = 1, o = {}) {
-    const P = A.pen(x, yb - (o.hop || 0) * s, 44, dir, s), V1 = '#b4542a', V2 = '#cc6c3a', V3 = '#8a3a1a', EAR = '#94401e', NOSE = '#b87a70', pose = o.pose || 'stand';
-    // tail: carried level, wagging
-    if (pose === 'point') P(-4, -21, 10, 2, V1);
-    else { const w = o.wag ? Math.floor(T * 12) % 2 : 0; P(2, -21, 4, 2, V1); P(-1, -22 - w, 4, 1, V1); P(-3, -23 - 2 * w, 3, 1, V1); }
-    dlegs(P, [7, 11], -10, 10, 2, V3, o, V3);
-    P(6, -15, 7, 4, V1);   // haunch
-    P(5, -21, 22, 7, V1); P(6, -21, 20, 1, V2); P(16, -14, 12, 4, V1); P(13, -14, 4, 1, V1); P(17, -11, 10, 1, V3);
-    if (pose === 'point') { P(22, -10, 2, 10, V3); P(22, -1, 3, 1, V3); P(25, -10, 2, 4, V1); P(26, -7, 3, 2, V1); P(27, -6, 2, 1, V3); }
-    else dlegs(P, [22, 25], -10, 10, 2, V1, o, V3);
-    if (pose === 'chew') {   // head down at the bone
-      P(24, -21, 5, 7, V1); P(26, -17, 5, 5, V1);
-      P(28, -16, 8, 6, V1); P(35, -14, 6, 4, V1); P(40, -14, 2, 2, NOSE); P(35, -11, 6, 1, V3);
-      P(28, -15, 4, 9, EAR); P(29, -6, 2, 1, EAR);
-      P(32, -14, 2, 1, INK_);
-    } else {
-      const up = pose === 'tilt' ? 1 : 0;
-      P(24, -25, 5, 6, V1); P(26, -28, 5, 4, V1); P(25, -25, 2, 1, V2);
-      P(28, -32 - up, 8, 6, V1); P(29, -32 - up, 6, 1, V2);
-      P(35, -30 - up, 6, 4, V1); P(36, -30 - up, 4, 1, V2); P(40, -30 - up, 2, 2, NOSE);
-      P(35, -27 - up, 6, 1, V3); P(36, -26 - up, 4, 1, V1);
-      if (o.bark) { P(36, -26 - up, 5, 2, '#5a1a10'); P(36, -24 - up, 4, 1, V1); }
-      if (pose === 'tilt') { P(27, -34, 5, 3, EAR); P(26, -32, 3, 3, EAR); }
-      else { P(28, -31, 4, 9, EAR); P(29, -22, 2, 1, EAR); P(31, -30, 1, 7, V3); }
-      P(33, -30 - up, 2, 2, '#e0a040'); P(34, -30 - up, 1, 1, INK_); P(32, -31 - up, 3, 1, V3);
-    }
-    P(24, -23, 5, 3, '#3d4a3a'); P(27, -20, 1, 2, '#cfd6dd');
-    if (o.wet) for (let i = 0; i < 4; i++) R(Math.round(x - 16 * s + i * 9 * s), Math.round(yb - 8 * s + ((T * 30 + i * 7) % 10) * s), s, 2 * s, '#8ec8f0');
+    const pose = o.pose || 'stand', gp = gait(o), wag = o.wag ? Math.floor(T * 8) % 2 : 0, bark = o.bark ? 1 : 0;
+    const key = `vz:${pose}:${gp.f}:${gp.amp}:${wag}:${bark}`;
+    stamp(key, 58, 46, VZ_PAL, '#4a1e0a', c => {
+      const { V1, V2, V3, V4, EAR } = VZ;
+      // far legs, in shadow
+      const fl = legPts(true, 9.5, -14.5, gp, 0.5, 2.2), hl = legPts(false, -12, -15.5, gp, 0, 2.2);
+      drawLeg(c, fl, 3.2, 2.1, V3, V4); drawLeg(c, hl, 3.6, 2.1, V3, V4);
+      // tail, carried level
+      const tw = pose === 'point' ? 0 : wag ? -1.6 : 0.6;
+      line(c, [[-16.5, -20.8], [-21.5, -22 + tw * 0.5]], 2.4, V1); line(c, [[-21.5, -22 + tw * 0.5], [-26.5, -22.8 + tw]], 1.4, V1);
+      // body: deep chest, tucked waist
+      curve(c, [['M', -17, -21.2], ['Q', -5, -24.8, 8, -24], ['Q', 15.5, -23.4, 15.2, -16.5], ['Q', 14.6, -10.6, 8, -10.4], ['Q', 0, -10.8, -6.2, -14.6], ['Q', -13, -13.2, -17.2, -16.8], ['Q', -18.6, -19.2, -17, -21.2]], V1);
+      curve(c, [['M', 15.2, -15], ['Q', 14.4, -10.6, 8, -10.4], ['Q', 0, -10.8, -6.2, -14.6], ['Q', -1, -12.6, 7, -12.4], ['Q', 12.4, -12.8, 15.2, -15]], V3);
+      curve(c, [['M', -14, -21.6], ['Q', -4, -24.2, 8, -23.4]], V2, false, 1.1);
+      curve(c, [['M', 8.5, -21], ['Q', 10.5, -17.5, 9, -14]], V3, false, 0.7);
+      E(c, -11.6, -16.6, 5.2, 5.6, V1, 0.35);   // haunch
+      curve(c, [['M', -15.6, -14], ['Q', -12, -11, -8.2, -13.4]], V3, false, 0.8);
+      // near legs
+      const nf = pose === 'point' ? [[10.5, -14.5], [14, -10.8], [12.8, -7.4], [12.4, -6.4], [14, -6.2]] : legPts(true, 10.5, -14.5, gp, 0, 2.2);
+      const nh = legPts(false, -11, -15.5, gp, 0.5, 2.2);
+      drawLeg(c, nh, 3.8, 2.2, V1, V3); drawLeg(c, nf, 3.4, 2.2, V1, V3);
+      // neck and collar
+      curve(c, [['M', 6, -23.6], ['Q', 10, -31.2, 14, -33.2], ['L', 18.6, -30.6], ['Q', 16, -24, 15, -18], ['Z']], V1);
+      curve(c, [['M', 16.6, -27], ['Q', 15.6, -22, 15, -18]], V3, false, 0.9);
+      poly(c, [[8.4, -24.6], [13, -30.4], [15.8, -28.7], [12, -22.6]], VZ.COL);
+      E(c, 12.6, -22.6, 0.85, 0.85, VZ.RING);
+      // head (tilts, or drops down to chew)
+      c.save();
+      if (pose === 'chew') { c.translate(16, -20); c.rotate(0.7); }
+      else { c.translate(15.6, -32.6); if (pose === 'tilt') c.rotate(-0.28); }
+      E(c, 1.4, -1.4, 5, 4.3, V1);
+      curve(c, [['M', 3, -3.9], ['L', 9.6, -3.3], ['Q', 12.2, -2.9, 12.1, -0.8], ['L', 11.6, 0.7], ['Q', 8, 1.7, 3, 1.5], ['Z']], V1);
+      curve(c, [['M', 3.2, -3.7], ['L', 10, -3.1]], V2, false, 0.9);
+      E(c, 0.6, -4.2, 3, 1, V2);
+      if (bark) { poly(c, [[5, 1], [11.6, 0.4], [10.4, 3.2], [5.2, 2.4]], VZ.MTH); E(c, 8.4, 2.4, 1.4, 0.8, VZ.TNG); curve(c, [['M', 4.8, 2.2], ['L', 10.4, 3.4], ['Q', 8, 4.6, 5, 3.6], ['Z']], V1); }
+      E(c, 11.9, -1.9, 1.25, 1.1, VZ.NOSE);
+      if (!bark) curve(c, [['M', 11.4, 0.6], ['L', 5.6, 1.1]], V4, false, 0.6);
+      E(c, 5.3, -2.5, 1.05, 0.95, VZ.EYE); E(c, 5.6, -2.5, 0.55, 0.62, VZ.INK); E(c, 5.3, -2.9, 0.25, 0.25, VZ.W);
+      curve(c, [['M', 4, -3.9], ['L', 6.6, -3.6]], V3, false, 0.6);
+      // the big soft ear
+      if (pose === 'tilt') curve(c, [['M', -1.6, -4.6], ['Q', 2, -6.2, 3.4, -3], ['Q', 4.4, 1, 1.6, 3.4], ['Q', -1.6, 2.6, -2.6, -0.8], ['Z']], EAR);
+      else curve(c, [['M', -1.6, -4.6], ['Q', 3, -4.9, 2.7, 0.4], ['Q', 2.3, 5.6, -0.4, 6.5], ['Q', -2.9, 4.1, -2.7, -0.5], ['Z']], EAR);
+      curve(c, [['M', 0.4, -3.4], ['Q', 1.2, 1, 0, 4.6]], V3, false, 0.6);
+      c.restore();
+    }, x, yb - (o.hop || 0), dir);
+    if (o.wet) for (let i = 0; i < 4; i++) R(Math.round(x - 16 + i * 9), Math.round(yb - 8 + ((T * 30 + i * 7) % 10)), 1, 2, '#8ec8f0');
   }
-  // the fluffy white husky, 44 long. o: { pose: stand|howl|chew, run, step, hop, pant, wag, bark }
+
+  /* the white husky: thick fluffy coat, curled plume tail, pointy ears, blue eyes */
+  const HK = { H1: '#f6f6f2', H2: '#ffffff', H3: '#d8dce6', H4: '#b4bcca', PINK: '#f2a8a0', NOSE: '#2a2a30', EYE: '#6aaee8', INK: '#22222a', TNG: '#e8708a', LIP: '#5a5a66' };
+  const HK_PAL = Object.values(HK);
+  // o: { pose: stand|howl|chew, run, step, hop, pant, wag, bark }
   function husky(x, yb, dir = 1, s = 1, o = {}) {
-    const P = A.pen(x, yb - (o.hop || 0) * s, 44, dir, s), H1 = '#f4f4f0', H2 = '#ffffff', H3 = '#d6dae2', H4 = '#9aa2b0', PINK = '#f2a8a0', pose = o.pose || 'stand';
-    const w = o.wag ? Math.floor(T * 10) % 2 : 0;
-    // curled plume of a tail over the back
-    P.c(5, -23, 4, H3); P.c(6, -27 - w, 4, H1); P.c(10, -29 - w, 3, H1); P.c(4, -29 - w, 2, H2);
-    dlegs(P, [7, 11], -9, 9, 3, H3, o, H4);
-    P(6, -14, 8, 5, H1);   // fluffy haunch
-    P(5, -22, 22, 12, H1); P(6, -23, 19, 1, H1); P(7, -22, 16, 1, H2);
-    for (let i = 0; i < 6; i++) P(7 + i * 3, -10, 2, 1, H3);
-    dlegs(P, [21, 25], -9, 9, 3, H1, o, H3);
-    P.c(26, -17, 6, H1); P.c(27, -14, 3, H2);   // chest ruff
-    const ears = (ex, ey) => {   // two pointy ears, pink inside
-      for (const d of [0, 4]) { P(ex + d, ey, 4, 2, H1); P(ex + d, ey - 1, 4, 1, H1); P(ex + d, ey - 2, 3, 1, H1); P(ex + d, ey - 3, 2, 1, H1); P(ex + d, ey - 4, 1, 1, H3); P(ex + d + 1, ey - 2, 1, 2, PINK); }
-    };
-    if (pose === 'howl') {
-      P(23, -27, 7, 8, H1); P(25, -35, 8, 9, H1); P(29, -40, 5, 6, H1); P(30, -43, 4, 3, H1); P(31, -44, 2, 2, INK_); P(33, -39, 2, 3, '#5a3040');
-      ears(24, -36); P(28, -33, 2, 1, INK_); P(26, -27, 4, 3, H1);
-    } else if (pose === 'chew') {
-      P(24, -22, 6, 7, H1); P(27, -18, 9, 7, H1); P(35, -15, 5, 4, H1); P(39, -15, 2, 2, INK_); P(35, -12, 4, 1, H4);
-      ears(28, -19); P(31, -16, 2, 2, '#6aaee8'); P(32, -16, 1, 1, INK_);
-    } else {
-      P(23, -27, 7, 8, H1); P(26, -26, 4, 3, H1);
-      P(27, -33, 9, 8, H1); P(28, -33, 7, 1, H2);
-      P(35, -29, 5, 4, H1); P(35, -30, 3, 1, H1); P(39, -29, 2, 2, INK_); P(35, -26, 4, 1, H4);
-      if (o.pant) { P(36, -25, 2, 3, '#e8708a'); P(36, -25, 3, 1, '#5a3040'); }
-      if (o.bark) P(35, -26, 5, 2, '#5a3040');
-      ears(28, -34);
-      P(31, -31, 3, 2, '#6aaee8'); P(32, -31, 1, 1, INK_); P(30, -31, 1, 1, H4);
-      P(27, -27, 3, 1, H3);
-    }
+    const pose = o.pose || 'stand', gp = gait(o), wag = o.wag ? Math.floor(T * 7) % 2 : 0, pant = o.pant ? 1 : 0, bark = o.bark ? 1 : 0;
+    const key = `hk:${pose}:${gp.f}:${gp.amp}:${wag}:${pant}:${bark}`;
+    stamp(key, 60, 50, HK_PAL, '#7e8698', c => {
+      const { H1, H2, H3, H4 } = HK;
+      const fl = legPts(true, 9, -13, gp, 0.5, 3), hl = legPts(false, -11.5, -14, gp, 0, 3);
+      drawLeg(c, fl, 4.4, 3.3, H3, H4); drawLeg(c, hl, 4.8, 3.3, H3, H4);
+      // the curled plume of a tail, lying over the back
+      const tw = wag ? 1 : 0;
+      const plume = [[-15.5, -21.5, 3.6], [-18, -26.5, 4.2], [-15.4, -30.6 - tw, 4.2], [-10.6, -31 - tw, 3.6], [-7.4, -28.4 - tw, 2.6]];
+      for (const [px, py, r] of plume) E(c, px + 0.8, py + 0.9, r, r, H3);
+      for (const [px, py, r] of plume) E(c, px, py, r, r, H1);
+      E(c, -15.6, -31.4 - tw, 2, 1.4, H2);
+      // body, belly fringe, haunch and chest ruff
+      E(c, -1, -19.4, 16.2, 8.6, H1);
+      for (let i = 0; i < 9; i++) E(c, -12 + i * 2.6, -11.4 + (i % 2) * 0.4, 1.7, 1.5, i % 2 ? H3 : H1);
+      E(c, -2, -25.2, 10, 1.8, H2);
+      E(c, -10.8, -15.8, 6.2, 6.6, H1); curve(c, [['M', -16, -12.6], ['Q', -11, -9, -6, -12]], H3, false, 0.9);
+      E(c, 10.6, -18.4, 6.6, 7.6, H1); E(c, 11.2, -14.4, 3.4, 2.6, H3);
+      // near legs: thick and fluffy
+      const nf = legPts(true, 10, -13, gp, 0, 3), nh = legPts(false, -10.5, -14, gp, 0.5, 3);
+      drawLeg(c, nh, 5, 3.4, H1, H3); drawLeg(c, nf, 4.6, 3.4, H1, H3);
+      // the mane
+      E(c, 11.4, -25, 6.4, 7.6, H1, -0.3);
+      for (let i = 0; i < 4; i++) E(c, 6.6 + i * 2.2, -19.6 + (i % 2), 1.6, 1.4, H1);
+      // head
+      c.save();
+      if (pose === 'chew') { c.translate(16.5, -18.5); c.rotate(0.7); }
+      else if (pose === 'howl') { c.translate(14.4, -31); c.rotate(-0.95); }
+      else c.translate(15.2, -29.8);
+      const ear = (ex, sh) => { poly(c, [[ex - 2, -5.5], [ex + 0.6 + sh, -12.2], [ex + 3.2, -6]], H1); poly(c, [[ex - 0.6, -6.4], [ex + 0.7 + sh, -10.2], [ex + 2.1, -6.6]], HK.PINK); };
+      ear(0.4, -0.4); ear(4.2, 0.6);
+      E(c, 1.6, -2, 5.6, 5, H1);
+      E(c, 0.2, 1.6, 4.2, 3.2, H1);   // cheek fluff
+      curve(c, [['M', 4, -3.2], ['L', 10.6, -1.4], ['Q', 11.4, -0.4, 10.6, 0.9], ['L', 4, 1.8], ['Z']], H1);
+      curve(c, [['M', 4.6, 1.6], ['L', 10.4, 0.9]], H3, false, 0.9);
+      if (pose === 'howl') { E(c, 9, 1.4, 1.6, 1.2, HK.LIP); E(c, 5.5, -2.8, 1.1, 0.35, HK.INK); }
+      else {
+        if (bark || pant) { poly(c, [[6, 1.2], [10.4, 0.9], [9.6, 3.2], [6.4, 2.8]], HK.LIP); E(c, 8, 3.2, 1.4, 1.9, HK.TNG); }
+        else curve(c, [['M', 10.2, 0.9], ['L', 6, 1.8]], HK.LIP, false, 0.6);
+        E(c, 5.6, -2.6, 1.25, 0.95, HK.EYE); E(c, 5.9, -2.6, 0.55, 0.62, HK.INK); E(c, 5.5, -2.95, 0.25, 0.25, H2);
+        curve(c, [['M', 4.2, -3.4], ['Q', 5.6, -4, 7, -3.4]], HK.LIP, false, 0.45);
+      }
+      E(c, 10.7, -0.8, 1.35, 1.15, HK.NOSE);
+      E(c, 0.6, -4.6, 3.4, 1.1, H2);
+      c.restore();
+    }, x, yb - (o.hop || 0), dir);
   }
+
+  /* the owl: round, soft and wide-eyed */
+  const OW = { O1: '#8a6a4a', O2: '#a8845a', O3: '#5e4430', BL: '#ecdcb8', BAR: '#a07850', EY: '#ffd21f', INK: '#22222a', BK: '#f5a020', W: '#ffffff' };
+  const OW_PAL = Object.values(OW);
   function owl(x, yb, s = 1, o = {}) {
-    const P = A.pen(x, yb, 18, 1, s), O1 = '#8a6a4a', O2 = '#a8845a', O3 = '#6a4a30', BL = '#ecdcb8';
-    if (o.fly) { const up = Math.floor(T * 10) % 2; P(-7, up ? -22 : -14, 10, 4, O2); P(15, up ? -22 : -14, 10, 4, O2); }
-    P(3, -24, 2, 3, O3); P(13, -24, 2, 3, O3);
-    P(3, -21, 12, 18, O1); P(2, -17, 14, 12, O1);
-    P(5, -13, 8, 9, BL); for (const [dx, dy] of [[6, -12], [9, -10], [11, -12], [7, -8], [10, -7]]) P(dx, dy, 1, 1, O3);
-    if (!o.fly) { P(1, -15, 2, 9, O3); P(15, -15, 2, 9, O3); }
-    P.c(6, -18, 4, O2); P.c(12, -18, 4, O2);
-    if (o.blink) { P(3, -18, 6, 1, O3); P(10, -18, 6, 1, O3); }
-    else {
-      const lk = o.look || 0;
-      P.c(6, -18, 3, '#ffd21f'); P.c(12, -18, 3, '#ffd21f');
-      P(5 + lk, -19, 2, 2, INK_); P(11 + lk, -19, 2, 2, INK_);
-    }
-    P(8, -16, 2, 3, '#f5a020');
-    if (o.hoot) P(8, -13, 2, 2, '#5a3a20');
-    P(5, -3, 3, 1, '#f5a020'); P(10, -3, 3, 1, '#f5a020');
+    const fly = o.fly ? (Math.floor(T * 10) % 2 ? 1 : 2) : 0, look = o.look || 0, blink = o.blink ? 1 : 0, hoot = o.hoot ? 1 : 0;
+    stamp(`ow:${fly}:${look}:${blink}:${hoot}`, 44, 34, OW_PAL, '#3a2a1a', c => {
+      const { O1, O2, O3 } = OW;
+      if (fly) { const up = fly === 1; E(c, -9, up ? -18 : -9, 9, 3.2, O3, up ? -0.5 : 0.4); E(c, 9, up ? -18 : -9, 9, 3.2, O3, up ? 0.5 : -0.4); }
+      E(c, 0, -9.6, 7.2, 9.6, O1);
+      E(c, 0, -7, 4.6, 6.4, OW.BL);
+      for (let i = 0; i < 4; i++) for (const sx2 of [-2, 0.4, 2.6]) curve(c, [['M', sx2 - 0.8, -11 + i * 2.6], ['L', sx2, -10.2 + i * 2.6], ['L', sx2 + 0.8, -11 + i * 2.6]], OW.BAR, false, 0.55);
+      if (!fly) { E(c, -6.2, -9, 2.4, 6.8, O3, 0.12); E(c, 6.2, -9, 2.4, 6.8, O3, -0.12); }
+      E(c, 0, -19, 7.4, 6.2, O1);
+      poly(c, [[-5.6, -22.6], [-6.8, -28.6], [-2.4, -24]], O3); poly(c, [[5.6, -22.6], [6.8, -28.6], [2.4, -24]], O3);
+      E(c, -3.1, -19.2, 3.7, 3.7, O2); E(c, 3.1, -19.2, 3.7, 3.7, O2);
+      if (blink) { curve(c, [['M', -5.4, -19.2], ['Q', -3.1, -18, -0.8, -19.2]], O3, false, 0.8); curve(c, [['M', 0.8, -19.2], ['Q', 3.1, -18, 5.4, -19.2]], O3, false, 0.8); }
+      else {
+        E(c, -3.1, -19.2, 2.6, 2.6, OW.EY); E(c, 3.1, -19.2, 2.6, 2.6, OW.EY);
+        E(c, -3.1 + look * 0.9, -19.2, 1.35, 1.35, OW.INK); E(c, 3.1 + look * 0.9, -19.2, 1.35, 1.35, OW.INK);
+        E(c, -3.6 + look * 0.9, -19.8, 0.45, 0.45, OW.W); E(c, 2.6 + look * 0.9, -19.8, 0.45, 0.45, OW.W);
+      }
+      poly(c, [[-1.1, -17.2], [1.1, -17.2], [0, hoot ? -15.4 : -14.4]], OW.BK);
+      if (hoot) E(c, 0, -14.2, 0.9, 0.8, O3);
+      for (const fx of [-2.4, 2.4]) { line(c, [[fx - 1, -0.4], [fx + 1, -0.4]], 0.9, OW.BK); }
+    }, x, yb, 1);
   }
-  // the big brown bear: on all fours (side) or standing up. o: { stand, roar, yawn, wave, step, run }
+
+  /* the bear: big, brown and (secretly) friendly */
+  const BR = { B1: '#7a4a2a', B2: '#94603a', B3: '#5a3418', MZ: '#c8a07a', INK: '#22222a', MTH: '#5a1a1a', TNG: '#e8708a', W: '#ffffff' };
+  const BR_PAL = Object.values(BR);
   function bear(x, yb, dir = 1, s = 1, o = {}) {
-    const B1 = '#7a4a2a', B2 = '#94603a', B3 = '#5a3418', MZ = '#c8a07a';
     if (o.stand) {
-      const P = A.pen(x, yb, 52, 1, s);
-      P(16, -14, 8, 14, B3); P(28, -14, 8, 14, B1); P(15, -1, 10, 1, B3); P(27, -1, 10, 1, B3);
-      P(12, -42, 28, 30, B1); P(14, -42, 24, 2, B2); P(18, -36, 16, 20, B2);
-      if (o.wave) { const a = Math.floor(T * 6) % 2; P(38, -54 - a, 7, 16, B1); P(38, -56 - a, 8, 4, B3); } else P(38, -40, 6, 16, B1);
-      P(8, -40, 6, 16, B3);
-      P(15, -58, 22, 17, B1); P.c(17, -57, 4, B1); P.c(35, -57, 4, B1); P.c(17, -57, 2, B3); P.c(35, -57, 2, B3);
-      P(20, -49, 12, 7, MZ); P(24, -49, 4, 2, INK_);
-      if (o.yawn) { P(21, -51, 3, 1, INK_); P(29, -51, 3, 1, INK_); } else { P(20, -53, 2, 2, INK_); P(30, -53, 2, 2, INK_); P(20, -53, 1, 1, '#ffffff'); P(30, -53, 1, 1, '#ffffff'); }
-      if (o.roar || o.yawn) { P(22, -46, 8, 5, '#5a1a1a'); P(23, -46, 1, 2, '#ffffff'); P(28, -46, 1, 2, '#ffffff'); P(24, -43, 4, 2, '#e8708a'); }
-      else { P(24, -45, 4, 1, B3); P(23, -46, 1, 1, B3); P(28, -46, 1, 1, B3); }
+      const wave = o.wave ? Math.floor(T * 5) % 2 + 1 : 0, roar = o.roar ? 1 : 0, yawn = o.yawn ? 1 : 0;
+      stamp(`brs:${wave}:${roar}:${yawn}`, 48, 66, BR_PAL, '#2a1a0a', c => {
+        const { B1, B2, B3 } = BR;
+        E(c, -5, -6, 4.6, 6.6, B3); E(c, 5, -6, 4.6, 6.6, B1); E(c, -5.4, -0.8, 4.4, 1.6, B3); E(c, 5.4, -0.8, 4.4, 1.6, B3);
+        E(c, 0, -24, 13.4, 16, B1); E(c, 0, -21.6, 8.2, 11, B2);
+        E(c, -12.6, -26, 3.6, 9, B3, 0.25);
+        if (wave) E(c, 13, -40 - (wave === 2 ? 1.4 : 0), 3.6, 9.4, B1, wave === 2 ? -0.3 : -0.1); else E(c, 12.6, -26, 3.6, 9, B1, -0.25);
+        E(c, -7, -51, 3.4, 3.4, B1); E(c, 7, -51, 3.4, 3.4, B1); E(c, -7, -51, 1.8, 1.8, B3); E(c, 7, -51, 1.8, 1.8, B3);
+        E(c, 0, -44, 10.4, 9.2, B1); E(c, 0, -47.8, 6, 2.2, B2);
+        E(c, 0, -40.6, 5.2, 3.8, BR.MZ);
+        if (yawn) { curve(c, [['M', -5.6, -45.4], ['Q', -4, -44.6, -2.4, -45.4]], BR.INK, false, 0.7); curve(c, [['M', 2.4, -45.4], ['Q', 4, -44.6, 5.6, -45.4]], BR.INK, false, 0.7); }
+        else { E(c, -4, -46, 1.15, 1.15, BR.INK); E(c, 4, -46, 1.15, 1.15, BR.INK); E(c, -4.3, -46.4, 0.4, 0.4, BR.W); E(c, 3.7, -46.4, 0.4, 0.4, BR.W); }
+        E(c, 0, -42.6, 1.9, 1.35, BR.INK);
+        if (roar || yawn) { E(c, 0, -38.4, 3.2, 2.6, BR.MTH); E(c, 0, -37.2, 1.8, 1.1, BR.TNG); poly(c, [[-2.4, -40.4], [-1.6, -40.4], [-2, -39.2]], BR.W); poly(c, [[1.6, -40.4], [2.4, -40.4], [2, -39.2]], BR.W); }
+        else curve(c, [['M', -1.8, -39.6], ['Q', 0, -38.6, 1.8, -39.6]], BR.INK, false, 0.6);
+      }, x, yb, 1);
       return;
     }
-    const P = A.pen(x, yb, 60, dir, s);
-    dlegs(P, [8, 14, 38, 44], -12, 12, 5, B3, o, B3);
-    P(4, -31, 44, 20, B1); P.c(30, -31, 7, B1); P(6, -31, 40, 2, B2); P(8, -13, 36, 2, B3);
-    P(44, -32, 12, 12, B1); P.c(46, -33, 3, B1); P.c(46, -33, 1, B3);
-    P(54, -26, 5, 5, MZ); P(58, -26, 2, 2, INK_); P(50, -29, 2, 2, INK_); P(55, -22, 3, 1, B3);
-    P(1, -27, 4, 4, B1);
+    const gp = gait(o);
+    stamp(`br:${gp.f}:${gp.amp}`, 72, 40, BR_PAL, '#2a1a0a', c => {
+      const { B1, B2, B3 } = BR;
+      const leg = (lx, off, col) => { const a = (gp.ph + off) * Math.PI * 2, sw = Math.sin(a) * gp.amp * 0.7, lf = Math.max(0, Math.cos(a)) * gp.lift; line(c, [[lx, -14], [lx + sw, -3 - lf]], 6.4, col); E(c, lx + sw + 1, -1.6 - lf, 3.6, 1.8, B3); };
+      leg(14, 0.5, B3); leg(-15, 0, B3);
+      E(c, -2, -19, 22, 11.4, B1); E(c, 6, -25, 10, 6.6, B1); E(c, -2, -27.6, 14, 2.2, B2); E(c, -2, -10.6, 16, 2.4, B3);
+      E(c, -23.6, -21, 2.6, 2.4, B1);
+      leg(17, 0, B1); leg(-12, 0.5, B1);
+      E(c, 22, -22, 8.4, 7.4, B1); E(c, 19, -29, 2.7, 2.7, B1); E(c, 19, -29, 1.3, 1.3, B3);
+      E(c, 29, -19.6, 5.2, 3.6, BR.MZ); E(c, 33.4, -20.6, 1.6, 1.25, BR.INK); E(c, 24.6, -24, 1.05, 1.05, BR.INK); E(c, 24.3, -24.4, 0.35, 0.35, BR.W);
+      curve(c, [['M', 28, -17.2], ['Q', 30, -16.4, 32, -17.6]], B3, false, 0.6);
+    }, x, yb, dir);
   }
+
+  /* the snake: green, coiled and grinning */
+  const SN = { G1: '#4aa83a', G2: '#3a8a2e', G3: '#6ac85a', BE: '#c8e070', SP: '#2a6a20', INK: '#22222a', W: '#ffffff', TG: '#e8222b' };
+  const SN_PAL = Object.values(SN);
   function snake(x, yb, s = 1, o = {}) {
-    const G1 = '#4aa83a', G2 = '#3a8a2e', BE = '#c8e070';
+    const G1 = '#4aa83a', G2 = '#3a8a2e';
     if (o.slither) {   // a wiggly line heading right from x
-      for (let i = 18; i >= 0; i--) { const sx2 = x - i * 3 * s, sy2 = yb - 3 * s + Math.round(Math.sin(T * 9 - i * 0.7) * 3 * s); circle(sx2, sy2, 2 * s, i % 3 ? G1 : G2); }
-      R(x, yb - 6 * s, 6 * s, 5 * s, G1); R(x + 3 * s, yb - 5 * s, s, s, INK_); R(x + 6 * s, yb - 4 * s, 3 * s, s, '#e8222b');
+      const n = Math.min(18, Math.floor((o.go || 0) / 3) + 4);   // the tail uncoils as it goes
+      for (let i = n; i >= 0; i--) { const sx2 = x - i * 3, sy2 = yb - 3 + Math.round(Math.sin(T * 9 - i * 0.7) * 3); circle(sx2, sy2, 2, i % 3 ? G1 : G2); }
+      R(x, yb - 6, 6, 5, G1); R(x + 3, yb - 5, 1, 1, INK_); R(x + 6, yb - 4, 3, 1, '#e8222b');
       return;
     }
-    const P = A.pen(x, yb, 24, 1, s);
-    P(2, -4, 20, 4, G1); P(2, -1, 20, 1, BE); P(4, -8, 16, 4, G2); P(6, -12, 12, 4, G1); P(7, -9, 10, 1, BE);
-    for (const [dx, dy] of [[5, -3], [11, -3], [17, -3], [8, -7], [14, -7], [10, -11]]) P(dx, dy, 2, 1, '#2a6a20');
-    P(14, -20, 4, 9, G1); P(15, -20, 2, 9, BE);
-    P(12, -25, 9, 6, G1); P(13, -25, 7, 1, '#6ac85a');
-    if (o.wink) P(14, -23, 3, 1, INK_); else { P(14, -24, 2, 2, '#ffffff'); P(15, -23, 1, 1, INK_); }
-    P(18, -24, 2, 2, '#ffffff'); P(19, -23, 1, 1, INK_);
-    P(16, -20, 4, 1, '#2a6a20');
-    if (o.hiss || Math.floor(T * 4) % 3 === 0) { P(21, -21, 3, 1, '#e8222b'); P(24, -22, 1, 1, '#e8222b'); P(24, -20, 1, 1, '#e8222b'); }
+    const wink = o.wink ? 1 : 0, tongue = o.hiss || Math.floor(T * 4) % 3 === 0 ? 1 : 0;
+    stamp(`sn:${wink}:${tongue}`, 34, 30, SN_PAL, '#1e4a16', c => {
+      const { G1: g1, G2: g2, G3, BE, SP } = SN;
+      E(c, 0, -2.6, 11.6, 3.2, g1); E(c, 0, -1.2, 10, 1.4, BE);
+      E(c, -0.6, -6.2, 9.4, 3.1, g2); E(c, -0.6, -5, 7.6, 1.2, BE);
+      E(c, 0, -9.6, 7.2, 2.9, g1); E(c, 0, -8.6, 5.6, 1, BE);
+      for (const [sx2, sy2] of [[-7, -3], [-1, -3.4], [5, -3], [-5, -6.8], [2, -7], [-2, -10.2], [3.4, -10]]) E(c, sx2, sy2, 1.2, 0.7, SP);
+      line(c, [[3, -11], [4.6, -15], [4.2, -18.6]], 3.8, g1);
+      line(c, [[3.8, -11.4], [5.2, -15]], 1.2, BE);
+      E(c, 5.6, -21, 4.8, 3.2, g1); E(c, 5.2, -22.6, 3.4, 1.1, G3);
+      if (wink) curve(c, [['M', 3.2, -21.8], ['L', 5, -21.8]], SN.INK, false, 0.7);
+      else { E(c, 4.2, -22, 1.1, 1.1, SN.W); E(c, 4.5, -21.9, 0.55, 0.6, SN.INK); }
+      E(c, 7.4, -22, 1.1, 1.1, SN.W); E(c, 7.7, -21.9, 0.55, 0.6, SN.INK);
+      curve(c, [['M', 4.4, -19.4], ['Q', 6.6, -18.4, 9, -19.6]], SP, false, 0.6);
+      if (tongue) { line(c, [[10, -20.4], [13, -20.4]], 0.6, SN.TG); line(c, [[13, -20.4], [14.2, -21.4]], 0.5, SN.TG); line(c, [[13, -20.4], [14.2, -19.6]], 0.5, SN.TG); }
+    }, x, yb, 1);
   }
   function bone(cx, yb, w, glow) {
     const h = Math.max(4, Math.round(w * 0.2)), r = Math.round(h * 0.75), y = yb - r * 2 + 1;
@@ -153,6 +299,19 @@
     }
     R(cx - w / 2 + r, y + r - h / 2 + 1, w - 2 * r, 1, '#ffffff');
   }
+  // a tree trunk with one branch reaching out (thick at the trunk, thin at the tip), needles at the end
+  function owlTree(tx, base, top, bx0, bx1, by) {
+    R(tx - 7, top, 14, base - top, '#6a4a2e'); R(tx - 7, top, 3, base - top, '#8a6a44'); R(tx + 4, top, 3, base - top, '#54381f');
+    for (let y = top + 6; y < base; y += 11) R(tx - 4 + (y % 5), y, 5, 1, '#54381f');
+    const n = Math.abs(bx1 - bx0), dir = Math.sign(bx1 - bx0);
+    for (let i = 0; i <= n; i++) {
+      const k = i / n, x = bx0 + dir * i, th = Math.max(2, Math.round(5 - k * 3)), y = Math.round(by + k * k * 3);
+      R(x, y - th, 1, th, '#6a4a2e'); R(x, y - th, 1, 1, '#8a6a44');
+    }
+    for (const [k, up] of [[0.45, -1], [0.75, 1]]) { const x = bx0 + dir * n * k, y = by + k * k * 3 - 3; for (let j = 0; j < 7; j++) R(x + dir * j, y + up * j * 0.8 - (up > 0 ? 0 : 0), 1, 1, '#6a4a2e'); }
+    const ex = bx1, ey = by + 3;
+    for (const [dx, dy, r] of [[0, -3, 5], [dir * 5, -1, 4], [-dir * 3, 1, 4], [dir * 2, 3, 3]]) { circle(ex + dx, ey + dy, r, '#2f6a3a'); circle(ex + dx - 1, ey + dy - 1, Math.max(1, r - 2), '#3f7a44'); }
+  }
   function pine(x, base, h, c1 = '#2f6a3a', c2 = '#3f7a44') {
     R(x - 1, base - 4, 3, 4, '#5a3a22');
     for (let k = 0; k < h; k++) { const w = 1 + Math.floor(((k % Math.ceil(h / 3)) + k / 3) * 0.55); R(x - w, base - h - 3 + k, 2 * w + 1, 1, k % 3 ? c1 : c2); }
@@ -163,7 +322,8 @@
   const sx = x => cam.ox + x * cam.z, sy = y => cam.oy + y * cam.z;
   function setCam(cx, cy, fw, fh) {
     const kw = W / fw, kh = H / fh;
-    const z = Math.max(1, Math.min(12, Math.floor(Math.min(kh, kw * (fw >= 140 ? 1.75 : 1.3)))));
+    const tall = H > W * 1.3, crop = fw >= 140 ? (tall ? 2.2 : 1.75) : 1.3;   // upright phones crop wide shots more so the dogs stay big
+    const z = Math.max(1, Math.min(12, Math.floor(Math.min(kh, kw * crop))));
     cam.z = z; cam.cx = cx;
     cam.ox = Math.round(W / 2 - cx * z);
     cam.oy = Math.round(H * (H > W * 1.3 ? 0.54 : 0.5) - cy * z);
@@ -270,6 +430,37 @@
     'WOW!'() { [659, 784, 988, 1319].forEach((f, i) => tone('sine', f, i * 0.07, 0.25, 0.06)); },
     'BRRR!'() { for (let i = 0; i < 6; i++) tone('square', 180 + (i % 2) * 20, i * 0.05, 0.05, 0.04); },
   };
+  // Real recordings (CC0, from OpenGameArt) take over from the synth when they've loaded.
+  const FILES = { 'WOOF!': ['dog-bark', 0.9], 'RUFF!': ['dog-bark-2', 0.8], 'ROAR!': ['bear-roar', 0.55], 'SPLASH!': ['splash', 0.8], 'CRUNCH!': ['crunch', 0.9] };
+  const bufs = {}, music = { buf: null, src: null, gain: null, t0: 0 };
+  let loaded = false;
+  function loadAudio() {
+    if (loaded || !ac) return;
+    loaded = true;
+    const get = name => fetch('audio/' + name + '.mp3').then(r => r.ok ? r.arrayBuffer() : null).then(ab => ab && ac.decodeAudioData(ab)).catch(() => null);
+    for (const [word, [name]] of Object.entries(FILES)) get(name).then(b => { if (b) bufs[word] = b; });
+    get('dogs-music').then(b => { if (b) music.buf = b; });
+  }
+  function playWord(word) {
+    const b = bufs[word];
+    if (!b) { if (SOUND[word]) SOUND[word](); return; }
+    const src = ac.createBufferSource(), gn = ac.createGain();
+    src.buffer = b; src.playbackRate.value = word === 'RUFF!' ? 1.12 : 1; gn.gain.value = FILES[word][1];
+    src.connect(gn); gn.connect(master); src.start();
+  }
+  function stopMusic() { if (music.src) { try { music.src.stop(); } catch (e) {} music.src = null; } }
+  function musicTick() {   // keep the looping tune in step with the story, fading out at the end
+    if (!music.buf || !ac) return false;
+    if (!music.src && st.t < END - 1) {
+      const src = ac.createBufferSource(), gn = ac.createGain();
+      src.buffer = music.buf; src.loop = true; gn.gain.value = 0.32;
+      src.connect(gn); gn.connect(master);
+      src.start(0, st.t % music.buf.duration);
+      music.src = src; music.gain = gn;
+    }
+    if (music.gain) music.gain.gain.value = 0.32 * clamp01((END - 0.4 - st.t) / 2.2);
+    return true;
+  }
   const NOTE = { C: 523, D: 587, E: 659, F: 698, G: 784, A: 880, c: 1047, g: 392, a: 440 };
   const TUNE = 'C.E.G.E.F.A.G...E.G.c.G.A.F.E...'.split('');   // a bouncy hiking tune, one beat per character
   const BEAT = 0.2;
@@ -295,17 +486,17 @@
         R(46, -26, 2, 26, '#7a5a3a'); R(36, -32, 22, 10, '#a87a4a'); R(37, -31, 20, 8, '#c99a5a');
         for (let k = 0; k < 6; k++) R(40 + k, -25 - k, 12 - 2 * k, 1, '#5a8a5a'); R(54, -28, 3, 3, '#5a3a22');
         vizsla(4, 8, 1, 1, { pose: t > 0.6 ? 'point' : 'stand' });
-        husky(-34, 10, 1, 1, { pose: t > 1.6 && t < 3 ? 'howl' : 'stand', pant: t < 1.6 || t >= 3, wag: true });
+        husky(-44, 10, 1, 1, { pose: t > 1.6 && t < 3 ? 'howl' : 'stand', pant: t < 1.6 || t >= 3, wag: true });
       },
-      words: [[1.7, 'AWOO!', () => [-22, -50]]],
+      words: [[1.7, 'AWOO!', () => [-30, -52]]],
     },
     { a: 3.6, b: 9, sky: 'woods', // 2. trotting through the tall pines
-      cam(t) { setCam(walk(t, 3.6, 9, -40, 190) - 10, -16, 170, 100); },
+      cam(t) { setCam(walk(t, 3.6, 9, -40, 190) - 24, -16, 170, 100); },
       world(t) {
         forestSet(); rays();
         for (let i = 0; i < 3; i++) A.bird(((T * 26 + i * 110) % 500) - 100, -66 + i * 10, 1, T + i, '#3a4a3a');
         const x = walk(t, 3.6, 9, -40, 190);
-        husky(x - 44, 9, 1, 1, { run: true, step: step(), pant: true, wag: true, hop: Math.abs(Math.sin(T * 10)) });
+        husky(x - 52, 9, 1, 1, { run: true, step: step(), pant: true, wag: true, hop: Math.abs(Math.sin(T * 10)) });
         vizsla(x, 8, 1, 1, { run: true, step: 1 - step(), wag: true, hop: Math.abs(Math.sin(T * 10 + 1)) });
       },
     },
@@ -313,8 +504,8 @@
       cam() { setCam(0, -60, 70, 66); },
       world(t) {
         const v = vis(); fill(v.y0, '#4a7a52'); for (let i = 0; i < 9; i++) pine(-60 + i * 16, -20 + (i % 3) * 6, 50, '#2a5a34', '#3a6a40');
-        R(-70, -40, 140, 4, '#6a4a2e'); R(-70, -40, 140, 1, '#8a6a44'); R(30, -48, 2, 8, '#6a4a2e');
-        owl(0, -40, 1, { hoot: t > 9.3 && t < 10.3 && Math.floor(T * 6) % 2, blink: t > 10.6 && t < 10.75, look: t > 10.8 ? 1 : 0 });
+        owlTree(-50, 40, v.y0, -43, 30, -40);
+        owl(0, -41, 1, { hoot: t > 9.3 && t < 10.3 && Math.floor(T * 6) % 2, blink: t > 10.6 && t < 10.75, look: t > 10.8 ? 1 : 0 });
       },
       words: [[9.3, 'HOO HOO!', () => [0, -66], true]],
     },
@@ -322,9 +513,10 @@
       cam() { setCam(-6, -24, 104, 70); },
       world(t) {
         forestSet();
-        R(-80, -64, 160, 4, '#6a4a2e'); owl(26, -64, 1, { look: -1, blink: t > 13.2 && t < 13.35 });
+        owlTree(66, 30, vis().y0, 59, 2, -64);
+        owl(26, -65, 1, { look: -1, blink: t > 13.2 && t < 13.35 });
         vizsla(-4, 8, 1, 1, { pose: t > 12 ? 'tilt' : 'stand' });
-        husky(-40, 9, 1, 1, { pose: 'stand', pant: true, hop: t > 12.4 && t < 12.7 ? 2 : 0 });
+        husky(-50, 9, 1, 1, { pose: 'stand', pant: true, hop: t > 12.4 && t < 12.7 ? 2 : 0 });
       },
       words: [[12.1, '?', () => [6, -30]], [12.6, '?', () => [-26, -34]]],
     },
@@ -333,10 +525,10 @@
       world(t) {
         forestSet();
         const k = seg(t, 14.4, 16.2);
-        R(-90, -64, 120, 4, '#6a4a2e');
-        owl(26 + k * 160, -64 - k * 50 - Math.sin(k * 9) * 4, 1, { fly: k > 0 });
+        owlTree(66, 30, vis().y0, 59, 2, -64);
+        owl(26 + k * 160, -65 - k * 50 - Math.sin(k * 9) * 4, 1, { fly: k > 0 });
         const x = walk(t, 14.8, 16.2, -30, 60);
-        husky(x - 40, 9, 1, 1, { run: t > 14.8, step: step(), pant: true });
+        husky(x - 52, 9, 1, 1, { run: t > 14.8, step: step(), pant: true });
         vizsla(x, 8, 1, 1, { run: t > 14.8, step: 1 - step() });
       },
     },
@@ -386,22 +578,22 @@
         forestSet();
         const j = Math.sin(seg(t, 25.5, 26.2) * Math.PI) * 10, back = eout(seg(t, 25.5, 26.2)) * 12;
         vizsla(-10 - back, 8, 1, 1, { hop: j, bark: t > 26.3 && t < 26.8 });
-        husky(-44 - back, 9, 1, 1, { hop: j * 0.8, bark: t > 26.6 && t < 27.1 });
+        husky(-58 - back, 9, 1, 1, { hop: j * 0.8, bark: t > 26.6 && t < 27.1 });
         bear(60, 12, -1, 1, {});
       },
       words: [[26.3, 'WOOF!', () => [0, -36]]],
     },
     { a: 27.6, b: 30.6, sky: 'woods', // 9. the bear yawns, waves, and goes back to its berries; the dogs tiptoe past
-      cam() { setCam(10, -20, 170, 100); },
+      cam(t) { setCam(t < 29 ? 40 : Math.max(20, Math.min(60, walk(t, 28.8, 30.6, -70, 110) - 26)), -20, 170, 100); },
       world(t) {
         forestSet();
         const sitting = t > 29.1;
         if (!sitting) bear(40, 12, 1, 1, { stand: true, yawn: t < 28.6, wave: t >= 28.6 });
         else { bear(48, 12, 1, 1, {}); for (let i = 0; i < 5; i++) circle(80 + i * 4, 6 - (i % 2) * 3, 1, '#5a3aa8'); }
         for (const [bx, by, r] of [[78, 6, 10], [92, 8, 8]]) circle(bx, by, r, '#3a7a34');
-        const x = walk(t, 28.8, 30.6, -70, 30);
-        husky(x - 36, 26, 1, 1, { step: Math.floor(T * 5) % 2, pant: true });
-        vizsla(x, 25, 1, 1, { step: Math.floor(T * 5 + 1) % 2 });
+        const x = walk(t, 28.8, 30.6, -70, 110);
+        husky(x - 50, 26, 1, 1, { step: 1, pant: true });
+        vizsla(x, 25, 1, 1, { step: 1 });
       },
     },
     { a: 30.6, b: 33.2, sky: 'day', // 10. up on the rocks: a snake! HSSS!
@@ -414,23 +606,23 @@
       words: [[31, 'HSSS!', () => [6, -28], true]],
     },
     { a: 33.2, b: 37.2, sky: 'day', // 11. the dogs hop back; the snake winks and wiggles away
-      cam() { setCam(0, -18, 160, 96); },
+      cam(t) { setCam(t < 35.4 ? -24 : -24 + walk(t, 35.4, 37.2, 0, 60), -18, 160, 96); },
       world(t) {
         const v = vis();
         cloudRow(0.6, -76); hills(-40, 22, 0.025, 6, '#9a9aa8', 0.4); fill(-20, '#b0aab0', 0); fill(0, '#c4b89a'); strokes(1, v.y1, '#a89a7a', 0.15, 8);
         for (const [rx, ry, r] of [[-90, -4, 12], [80, -2, 14], [110, 4, 9]]) { ellipse(rx, ry, r, r * 0.6, '#8a8a92'); ellipse(rx - 2, ry - 2, r - 3, r * 0.4, '#a8a8b0'); }
         const k = seg(t, 34.2, 36.4);
         if (k <= 0) snake(10, 14, 1, { wink: t > 33.8 && t < 34 });
-        else snake(10 + k * 140, 16, 1, { slither: true });
+        else snake(10 + k * 140, 18, 1, { slither: true, go: k * 140 });
         const back = Math.sin(seg(t, 33.2, 33.8) * Math.PI) * 8, go = walk(t, 35.4, 37.2, 0, 60);
         vizsla(-36 - (t < 33.8 ? back : 0) + go, 12, 1, 1, { hop: t < 33.8 ? back : 0, run: go > 0, step: step() });
-        husky(-74 - (t < 33.8 ? back : 0) + go, 13, 1, 1, { hop: t < 33.8 ? back * 0.8 : 0, run: go > 0, step: 1 - step(), pant: true });
+        husky(-86 - (t < 33.8 ? back : 0) + go, 13, 1, 1, { hop: t < 33.8 ? back * 0.8 : 0, run: go > 0, step: 1 - step(), pant: true });
       },
     },
     { a: 37.2, b: 44, sky: 'snow', // 12. up the mountain, from the trees through the rocks into the snow
       gy: x => 30 - x * 0.5,
       dogX: t => walk(t, 37.3, 43.8, -110, 230),
-      cam(t) { const x = this.dogX(t); setCam(x - 14, this.gy(x) - 18, 150, 100); },
+      cam(t) { const x = this.dogX(t); setCam(x - 24, this.gy(x - 24) - 16, 150, 100); },
       world(t) {
         const v = vis();
         cloudRow(0.7, -150);
@@ -449,7 +641,7 @@
         }
         for (let x = -150; x < 80; x += 26) { const top = this.gy(x); if (top > 0) pine(x + 8, top + 3, 20 + (x % 3) * 3, '#2f6a3a', '#3f7a44'); }
         for (let x = 60; x < 200; x += 34) { const top = this.gy(x); ellipse(x, top - 1, 6, 3, '#7a7a86'); ellipse(x - 1, top - 2, 4, 2, '#9a9aa6'); }
-        const x = this.dogX(t), hx = x - 38;
+        const x = this.dogX(t), hx = x - 50;
         husky(hx, this.gy(hx) + 2, 1, 1, { run: true, step: step(), pant: true, wag: this.gy(hx) < -50 });
         vizsla(x, this.gy(x) + 2, 1, 1, { run: true, step: 1 - step(), wag: true });
       },
@@ -476,21 +668,21 @@
         for (let i = 0; i < 16; i++) { const fx = -150 + i * 22, fy = -10 + (i % 4) * 9; R(fx, fy, 2, 2, ['#ffd21f', '#ff6fb4', '#ffffff'][i % 3]); }
         bone(110, 6, 70, true);
         const x = walk(t, 49.4, 52.6, -150, 60);
-        husky(x - 40, 14, 1, 1, { run: true, step: step(), pant: true, hop: Math.abs(Math.sin(T * 12)) * 3 });
+        husky(x - 52, 14, 1, 1, { run: true, step: step(), pant: true, hop: Math.abs(Math.sin(T * 12)) * 3 });
         vizsla(x, 12, 1, 1, { run: true, step: 1 - step(), hop: Math.abs(Math.sin(T * 12 + 1)) * 3 });
       },
       upd(t) { if (Math.random() < 0.3) sparkle(sx(110), sy(-8), 40 * cam.z / 2, 1, '#fff6b0'); },
     },
     { a: 52.6, b: 60, sky: 'dusk', // 15. chomp! both ends of the giant bone, tails wagging, as the sun goes down
-      cam(t) { const k = eout(seg(t, 56.6, 59)); setCam(0, -14 - k * 10, lerp(110, 190, k), lerp(64, 110, k)); },
+      cam(t) { const k = eout(seg(t, 56.6, 59)); setCam(0, -14 - k * 10, lerp(124, 190, k), lerp(64, 110, k)); },
       world(t) {
         const v = vis();
         circle(0, -40, 22, '#ffd27a'); circle(0, -40, 18, '#ffe6a0');
         hills(-30, 16, 0.03, 9, '#c49a7a'); fill(-16, '#8ab85a'); strokes(-14, v.y1, '#6a9a4a', 0.12, 10); fore(14, 'meadow', 10);
         bone(0, 6, 40, false);
         const chomp = Math.floor(T * 5) % 2;
-        vizsla(-32, 10 - chomp, 1, 1, { pose: 'chew', wag: true });
-        husky(32, 11 - (1 - chomp), -1, 1, { pose: 'chew', wag: true });
+        vizsla(-36, 10 - chomp, 1, 1, { pose: 'chew', wag: true });
+        husky(37, 11 - (1 - chomp), -1, 1, { pose: 'chew', wag: true });
       },
       upd(t) { if (Math.random() < 0.08) st.hearts.push({ x: rand(W * 0.3, W * 0.7), y: sy(-24), vy: -rand(14, 24) * cam.z, life: 1.6, r: Math.max(4, Math.round(cam.z * 3)) }); },
       words: [[53.2, 'CRUNCH!', () => [-18, -26]], [54.8, 'CRUNCH!', () => [18, -26]], [57, 'YUM!', () => [0, -34], true]],
@@ -501,7 +693,7 @@
   const st = { t: 0, done: false, fired: {}, saved: null, paused: false, ui: 0, drag: null, beat: -1, hearts: [] };
   const shotAt = t => { for (let i = 0; i < SHOTS.length; i++) if (t < SHOTS[i].b) return SHOTS[i]; return SHOTS[SHOTS.length - 1]; };
   function camNow() { const s = shotAt(st.t); s.cam.call(s, st.t); return s; }
-  function seek(t) { st.t = Math.max(0, Math.min(END - 0.05, t)); st.fired = {}; parts = []; st.hearts = []; camNow(); }
+  function seek(t) { stopMusic(); st.t = Math.max(0, Math.min(END - 0.05, t)); st.fired = {}; parts = []; st.hearts = []; camNow(); }
   function ctl() {
     const b = 26, cy = H - L.safeB - 30, cx = Math.round(W / 2), half = Math.round(Math.min(W - L.safeL - L.safeR - 32, 360) / 2);
     return { play: { x: cx - b / 2, y: cy - b / 2, s: b }, track: { x0: cx - half, x1: cx + half, y: cy - b / 2 - 14 } };
@@ -543,16 +735,16 @@
     freeTouch: true,
     cover(x, yb) { husky(x + 8, yb - 1, 1, 1, { pant: true }); vizsla(x + 38, yb - 1, 1, 1, {}); },
     layout() {},
-    enter() { Object.assign(st, { t: 0, done: false, fired: {}, paused: false, ui: 0, drag: null, beat: -1, hearts: [] }); if (!st.saved) st.saved = clouds; clouds = []; },
-    leave() { if (st.saved) { clouds = st.saved; st.saved = null; } },
+    enter() { Object.assign(st, { t: 0, done: false, fired: {}, paused: false, ui: 0, drag: null, beat: -1, hearts: [] }); if (!st.saved) st.saved = clouds; clouds = []; loadAudio(); },
+    leave() { stopMusic(); if (st.saved) { clouds = st.saved; st.saved = null; } },
     update(dt) {
       if (st.done) return;
       st.ui = Math.max(0, st.ui - dt);
-      if (st.paused || st.drag != null) { camNow(); return; }
+      if (st.paused || st.drag != null) { stopMusic(); camNow(); return; }
       st.t += dt;
       const s = camNow();
-      tuneTick();
-      for (const sh of SHOTS) (sh.words || []).forEach(([wt, word], i) => { const key = sh.a + ':' + i; if (st.t >= wt && st.t < wt + 0.3 && !st.fired[key]) { st.fired[key] = true; if (SOUND[word]) SOUND[word](); } });
+      if (!musicTick()) tuneTick();
+      for (const sh of SHOTS) (sh.words || []).forEach(([wt, word], i) => { const key = sh.a + ':' + i; if (st.t >= wt && st.t < wt + 0.3 && !st.fired[key]) { st.fired[key] = true; playWord(word); } });
       if (s.upd) s.upd.call(s, st.t);
       for (const h of st.hearts) { h.life -= dt; h.y += h.vy * dt; }
       st.hearts = st.hearts.filter(h => h.life > 0);
@@ -597,6 +789,6 @@
     },
     move(x, y, id) { if (st.drag === id) { st.ui = 3.5; seek(tAtX(ctl(), x)); } },
     release(id) { if (st.drag === id) { st.drag = null; st.ui = 3.5; } },
-    _st: st, _jump(t) { seek(t); }, _spr: { vizsla, husky, owl, bear, snake },
+    _st: st, _jump(t) { seek(t); }, _audio: () => ({ sfx: Object.keys(bufs), music: !!music.buf, playing: !!music.src }), _spr: { vizsla, husky, owl, bear, snake },
   };
 })();

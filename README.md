@@ -39,3 +39,11 @@ Recorded lines live in `audio/` as `<phrase>.mp3` (e.g. `fire-truck.mp3`, `red.m
 ```sh
 ffmpeg -i in.mp3 -af "silenceremove=start_periods=1:start_threshold=-42dB:start_silence=0.02,areverse,silenceremove=start_periods=1:start_threshold=-42dB:start_silence=0.08,areverse,loudnorm=I=-16:TP=-1.5" -ac 1 -b:a 64k audio/name.mp3
 ```
+
+## Sound credits
+The Big Bone Adventure uses free public-domain (CC0) sounds from OpenGameArt.org; no attribution is required, but thank you:
+- Music: "Happy Adventure (Loop)" by TinyWorlds (`audio/dogs-music.mp3`)
+- Barks: "Dog Sounds" pack and "80 CC0 creature SFX" (`audio/dog-bark.mp3`, `audio/dog-bark-2.mp3`)
+- Bear: "Bear Growls" (`audio/bear-roar.mp3`)
+- Splash: "6 Short Water Splashes" (`audio/splash.mp3`)
+- Crunch: "Crunchy Bite" (`audio/crunch.mp3`)

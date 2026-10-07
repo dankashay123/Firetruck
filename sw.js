@@ -1,6 +1,6 @@
 // Offline support: everything the game needs is cached on first visit.
 // Bump VERSION whenever any file changes so devices pick up the update.
-const VERSION = 'fire-station-v30';
+const VERSION = 'fire-station-v31';
 const FILES = [
   './',
   './index.html',
@@ -26,6 +26,12 @@ const FILES = [
   './manifest.webmanifest',
   './icon-180.png',
   './icon-512.png',
+  './audio/dog-bark.mp3',
+  './audio/dog-bark-2.mp3',
+  './audio/bear-roar.mp3',
+  './audio/splash.mp3',
+  './audio/crunch.mp3',
+  './audio/dogs-music.mp3',
   './audio/all-parked.mp3',
   './audio/ambulance-here-to-help.mp3',
   './audio/ambulance-on-the-way.mp3',
