@@ -26,6 +26,22 @@
     { name: 'sandwich', draw: P => { P(0, -8, 9, 3, '#5a3418'); P(0, -5, 9, 2, '#fff6e0'); P(0, -3, 9, 3, '#5a3418'); P(1, -7, 1, 1, '#3a2010'); P(4, -7, 1, 1, '#3a2010'); P(7, -7, 1, 1, '#3a2010'); P(2, -2, 1, 1, '#3a2010'); P(6, -2, 1, 1, '#3a2010'); } },
   ];
   const PUP = { name: 'pup cup', draw: P => { P(1, -5, 7, 5, '#ffd21f'); P(1, -5, 7, 1, '#e8b010'); P(0, -8, 9, 3, '#f6ead0'); P(1, -10, 7, 2, '#f6ead0'); P(3, -11, 3, 1, '#f6ead0'); P(1, -8, 2, 1, '#ffffff'); P(2, -10, 2, 1, '#ffffff'); P(2, -13, 5, 2, '#d9a35a'); P(1, -14, 2, 2, '#d9a35a'); P(6, -14, 2, 2, '#d9a35a'); } };
+  // small menu-board versions of the ten treats, 6 wide and about 11 tall
+  const mcone = P => { P(1, -5, 4, 1, CONE); P(1, -4, 4, 1, CONE2); P(2, -3, 2, 1, CONE); P(2, -2, 2, 1, CONE2); P(2, -1, 2, 1, CONE); };
+  const mscoop = (P, y, c, c2) => { P(1, y - 3, 4, 1, c); P(0, y - 2, 6, 2, c); P(1, y - 3, 1, 1, '#ffffff'); P(0, y, 6, 1, c2); };
+  const MINI = [
+    P => { mcone(P); mscoop(P, -6, '#ff8fb8', '#e8608f'); },
+    P => { mcone(P); mscoop(P, -6, '#8a5230', '#6a3a1e'); },
+    P => { mcone(P); mscoop(P, -6, '#fff6e0', '#e8dcc0'); P(1, -8, 1, 1, '#e8222b'); P(3, -7, 1, 1, '#2a6fe0'); P(4, -8, 1, 1, '#3fb43a'); },
+    P => { mcone(P); mscoop(P, -6, '#9ef0c8', '#6ad4a4'); P(1, -7, 1, 1, '#4a2a1a'); P(4, -8, 1, 1, '#4a2a1a'); },
+    P => { mcone(P); mscoop(P, -6, '#ff8fb8', '#e8608f'); mscoop(P, -9, '#7ad0ff', '#4aa8e8'); P(2, -13, 2, 1, '#e8222b'); },
+    P => { P(2, -2, 2, 2, '#d9b98a'); ['#e8222b', '#f57a12', '#ffd21f', '#3fb43a', '#2a6fe0'].forEach((c, i) => P(1, -12 + i * 2, 4, 2, c)); },
+    P => { P(2, -2, 2, 2, '#d9b98a'); P(1, -5, 4, 3, '#2a6fe0'); P(1, -8, 4, 3, '#ffffff'); P(1, -10, 4, 2, '#e8222b'); P(2, -11, 2, 1, '#e8222b'); },
+    P => { P(2, -2, 2, 2, '#d9b98a'); P(1, -11, 4, 9, '#ff9a3a'); P(1, -11, 1, 9, '#f57a12'); P(3, -10, 1, 6, '#fff2d8'); P(2, -10, 1, 1, '#ffffff'); },
+    P => { P(1, -3, 4, 3, '#ffffff'); P(1, -3, 4, 1, '#ff6fb4'); P(0, -6, 6, 3, '#b48ae8'); P(1, -8, 4, 2, '#c9a4f2'); P(2, -9, 2, 1, '#b48ae8'); },
+    P => { P(0, -6, 6, 2, '#5a3418'); P(0, -4, 6, 2, '#fff6e0'); P(0, -2, 6, 2, '#5a3418'); P(1, -6, 1, 1, '#3a2010'); P(4, -1, 1, 1, '#3a2010'); },
+  ];
+  function miniTreat(i, x, yb) { MINI[i](pen(Math.round(x), Math.round(yb), 6, 1, 1)); }
   // draw a treat with its bottom center at (x, yb), at an integer scale k
   function treat(t, x, yb, k = 1) {
     g.save(); g.translate(Math.round(x), Math.round(yb)); g.scale(k, k);
@@ -216,10 +232,10 @@
     // the menu board: all ten treats (the one being asked for flashes)
     P(4, 5, 50, 41, '#5a3a2a'); P(5, 6, 48, 39, '#fff2d8');
     const c0 = st.q[0], want = c0 && c0.state === 'wait' && !c0.dog && !st.fly ? c0.want : -1;
-    TREATS.forEach((t, i) => {
-      const mx = x + 11 + (i % 5) * 9, my = top + 27 + Math.floor(i / 5) * 17;   // treat() centers on mx
-      if (i === want && Math.floor(T * 4) % 2) R(mx - 5, my - 20, 10, 21, '#ffd21f');
-      treat(t, mx, my, 1);
+    TREATS.forEach((t, i) => {   // two roomy rows of five little treats
+      const mx = x + 10 + (i % 5) * 9.5, my = top + 23 + Math.floor(i / 5) * 18;   // miniTreat() centers on mx
+      if (i === want && Math.floor(T * 4) % 2) R(Math.round(mx) - 5, my - 15, 10, 17, '#ffd21f');
+      miniTreat(i, mx, my);
     });
     // the giant cone on the roof, and a loudspeaker
     const bob = Math.round(Math.sin(T * 2.4));
