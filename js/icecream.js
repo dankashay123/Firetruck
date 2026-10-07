@@ -128,6 +128,7 @@
     Y.lawn = Y.yG + 6;
     Y.big = H - L.safeB - Y.lawn > 50;     // room for the dogs to play in front (drawn bigger: they're closer)
     Y.home = { x: L.safeL + 4, y: H - L.safeB - L.blob - 4, s: L.blob };
+    Y.kitchen = { x: L.safeL + 4, y: L.safeT + 4, s: L.blob };   // into the kitchen to make your own
   }
 
   /* ---------- state ---------- */
@@ -343,6 +344,14 @@
     treat(t, bx + Math.round(bw / 2), by + bh - 4 + Math.round(Math.sin(T * 5)), k);
     if (Math.floor(T * 1.5) % 2 === 0) sparkleDot(bx + bw - 4, by + 4);
   }
+  // a pink button showing a soft-serve swirl: opens the kitchen
+  function kitchenButton(b) {
+    button(b, '#ff6fb4', '#c73d84');
+    const cx = Math.round(b.x + b.s / 2), by = Math.round(b.y + b.s - 4), pulse = Math.round(Math.sin(T * 4));
+    for (let k = 0; k < 7; k++) R(cx - 3 + (k >> 1), by - 7 + k, 7 - (k >> 1) * 2, 1, k % 2 ? '#b07a34' : '#d9a35a');
+    R(cx - 5, by - 10, 11, 3, '#fff6e0'); R(cx - 4, by - 13 + pulse * 0, 9, 3, '#ffd0e4'); R(cx - 3, by - 16, 7, 3, '#fff6e0'); R(cx - 1, by - 18, 3, 2, '#ffd0e4');
+    R(cx - 4, by - 10, 2, 1, '#ffffff'); if (Math.floor(T * 2) % 2) { R(b.x + b.s - 4, b.y + 2, 1, 3, '#ffffff'); R(b.x + b.s - 5, b.y + 3, 3, 1, '#ffffff'); }
+  }
   function sparkleDot(x, y) { R(x, y - 1, 1, 3, '#ffd21f'); R(x - 1, y, 3, 1, '#ffd21f'); }
 
   SCENES.icecream = {
@@ -350,14 +359,19 @@
     freeTouch: true,
     layout,
     groundY: () => Y.hz,
-    enter() {
+    enter(arg) {
       layout();
+      SCENES.icecream._keepMusic = false;
+      loadAudio(); startMusic();
+      if (arg && arg.back) return;   // back from the kitchen: the line is just as we left it
       Object.assign(st, { q: [], leaving: [], fly: null, served: 0, spawnT: 0.4, n: 0, vendor: 1, bell: 0 });
       hearts = []; st.ball.x = L.cx; dogs.vizsla.away = dogs.husky.away = false;
+      for (const d of Object.values(dogs)) d.away = false;
       dogs.vizsla.x = L.cx - 20; dogs.husky.x = L.cx - 44;
-      loadAudio(); startMusic(); play('bell');
+      play('bell');
     },
-    leave() { stopMusic(); },
+    _audio: { play: (k, r) => play(k, r), startMusic: () => { loadAudio(); startMusic(); }, stopMusic: () => stopMusic() },
+    leave() { if (!SCENES.icecream._keepMusic) stopMusic(); },
     update,
     drawWorld() {
       park();
@@ -382,9 +396,11 @@
     drawUI() {
       wantBubble(front());
       drawHomeButton(Y.home);
+      if (SCENES.icekitchen) kitchenButton(Y.kitchen);
     },
     tap(x, y) {
       if (inBox(Y.home, x, y)) { goScene('station'); return true; }
+      if (SCENES.icekitchen && inBox(Y.kitchen, x, y, 3)) { SCENES.icecream._keepMusic = true; play('pop'); goScene('icekitchen'); return true; }
       const dy = dogY();
       for (const n of ['vizsla', 'husky']) {
         const d = dogs[n];

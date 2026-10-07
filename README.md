@@ -13,7 +13,7 @@ A pixel-art toy for a toddler who loves fire trucks. One page, no build step, no
   - **Star: police mission.** Stop the traffic so ducks and people can cross.
   - **Heart: Who Comes to Help?** Pick the right vehicle for each problem.
   - **Movie screen: the cinema.** Short cartoons to watch: the fire truck, the police car, the ambulance, and a sing-along of *Little Blue Truck* (Blue, the big dump truck, the toad, the goat and the farm animals) drawn from our own copy of the book. Plus *The Big Bone Adventure*, starring our two dogs (the Vizsla and the white husky) on a hike past an owl, a bear and a snake, up a snowy mountain and down to a giant bone.
-  - **Ice cream: the Ice Cream Truck.** People (and sometimes our two dogs, for a pup cup) line up at the window; each dreams of one of ten treats, and a tap anywhere hands it over. Tap a dog in the park to make it bark.
+  - **Ice cream: the Ice Cream Truck.** People (and sometimes our two dogs, for a pup cup) line up at the window; each dreams of one of ten treats, and a tap anywhere hands it over. Tap a dog in the park to make it bark. The pink swirl button (top left) opens the **kitchen**: tap a soft-serve machine and press and hold to pour a swirl, switch to the scoop counter to stack scoops from six tubs, add sprinkles, chocolate sauce, whipped cream, candy stars and a cherry, then ring the bell to serve it.
   - **Moon: bedtime.** Night falls; tap each vehicle to roll its garage door down. Then the lights go out, the dog curls up and a lullaby plays. Tap the sun button or the moon to wake everyone up.
 - Hidden surprises: the **bell** on the tower, the **dog**, the **fire hydrant** and the **helicopter**.
 
