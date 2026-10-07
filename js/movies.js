@@ -6,6 +6,7 @@
     { kind: 'police', scene: 'moviePolice', i: VI.police, bg: '#2a6fe0' },
     { kind: 'amb', scene: 'movieAmb', i: VI.amb, bg: '#f4f7fb' },
     { kind: 'book', scene: 'movieBook', cover: true, bg: '#e2b440', sky: '#f4c8b2' },
+    { kind: 'dogs', scene: 'movieDogs', cover: true, bg: '#5a9a42', sky: '#a2d2ee' },
   ];
   const st = { cards: [], watched: null, t: 0, scale: 1 };
   let tmp = null;
@@ -26,21 +27,24 @@
     st.header = { y: y0, h: Math.min(46, Math.round(uh * 0.14)) };
     const avail = EPISODES.filter(e => SCENES[e.scene]);
     const n = Math.max(1, avail.length), top = y0 + st.header.h + 8, bottomPad = L.blob + 12;
-    const tall = uh > uw;
-    // card size: as big as fits, vehicles drawn at 2x when there's room
-    if (tall) {
-      const ch = Math.floor((y1 - bottomPad - top - (n - 1) * 8) / n);
-      st.scale = ch >= 100 && uw >= 160 ? 2 : 1;
-      const cw = Math.min(uw - 8, st.scale === 2 ? 160 : 100), h = Math.min(ch, st.scale === 2 ? 110 : 64);
-      const gap = (y1 - bottomPad - top - n * h) / (n + 1);
-      st.cards = avail.map((e, k) => ({ e, x: Math.round(x0 + (uw - cw) / 2), y: Math.round(top + gap + k * (h + gap)), w: cw, h }));
-    } else {
-      const cw0 = Math.floor((uw - (n - 1) * 10) / n);
-      st.scale = cw0 >= 156 && uh >= 150 ? 2 : 1;
-      const cw = Math.min(cw0, st.scale === 2 ? 160 : 100), h = st.scale === 2 ? 104 : 62;
-      const total = n * cw + (n - 1) * 10, cy = Math.round((top + y1 - bottomPad) / 2 - h / 2);
-      st.cards = avail.map((e, k) => ({ e, x: Math.round(x0 + (uw - total) / 2 + k * (cw + 10)), y: Math.max(top, cy), w: cw, h }));
+    // try every column count; keep the one with the biggest cards that still hold their picture
+    const availH = y1 - bottomPad - top;
+    let best = null;
+    for (let cols = 1; cols <= n; cols++) {
+      const rows = Math.ceil(n / cols);
+      const cw = Math.floor((uw - (cols - 1) * 10) / cols), ch = Math.floor((availH - (rows - 1) * 8) / rows);
+      const scale = cw >= 160 && ch >= 116 ? 2 : 1, fit = Math.min(cw / (80 * scale), ch / (62 * scale)) * scale;
+      if (!best || fit > best.fit) best = { cols, rows, scale, fit, cw: Math.min(cw, scale === 2 ? 160 : 100), h: Math.min(ch, scale === 2 ? 116 : 64), ch };
     }
+    const { cols, rows, cw, h } = best;
+    st.scale = best.scale;
+    const gapY = Math.max(8, Math.min(24, (availH - rows * h) / (rows + 1))), gridH = rows * h + (rows - 1) * gapY;
+    const gy = Math.round(top + (availH - gridH) / 2);
+    st.cards = avail.map((e, k) => {
+      const row = Math.floor(k / cols), inRow = Math.min(cols, n - row * cols), col = k % cols;
+      const rowW = inRow * cw + (inRow - 1) * 10;
+      return { e, x: Math.round(x0 + (uw - rowW) / 2 + col * (cw + 10)), y: Math.round(gy + row * (h + gapY)), w: cw, h };
+    });
     st.home = { x: L.safeL + 8, y: y1 - L.blob, s: L.blob };
   }
 
