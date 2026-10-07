@@ -333,5 +333,6 @@
       return true;
     },
     _st: st,
+    _treat: (i, x, yb, k) => treat(TREATS[i], x, yb, k),   // used by the menu tile
   };
 })();

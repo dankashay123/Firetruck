@@ -667,13 +667,86 @@
   /* ---------- the game picker: a full-screen page of big picture tiles ---------- */
   const LABEL = { fire: 'FIRE', amb: 'AMBULANCE', police: 'POLICE', help: 'WHO HELPS?', wash: 'CAR WASH', icecream: 'ICE CREAM', chopper: 'HELICOPTER', stickers: 'STICKERS', movies: 'MOVIES', drive: 'DRIVE', bed: 'BEDTIME' };
   const TILE_BG = { fire: '#ffd9d4', amb: '#e8f0fa', police: '#d6e4ff', help: '#d9f2d4', wash: '#d4f1fa', icecream: '#ffe0ec', chopper: '#dff1ff', stickers: '#ffdcef', movies: '#e6d9f2', drive: '#ffe6cc', bed: '#e2d6f5' };
-  let iconCv = null;
-  function bigIcon(k, cx, cy, sc) {   // a launcher icon drawn small, then scaled up with crisp pixels
-    if (!iconCv) { iconCv = document.createElement('canvas'); iconCv.width = 40; iconCv.height = 42; }
-    const ig = iconCv.getContext('2d'), prev = g;
-    ig.clearRect(0, 0, 40, 42); g = ig; ICONS[k](20, 20, 16); g = prev;
+  /* little picture cards for the picker, drawn with the game's own sprites at its own pixel size */
+  const ART_W = 72, ART_H = 50;
+  let artCv = null;
+  const sky = (top = '#8fd6ff', bot = '#c4ecff') => { R(0, 0, ART_W, 26, top); R(0, 26, ART_W, 14, bot); };
+  const grass = (y = 40) => { R(0, y, ART_W, ART_H - y, '#6cbf5a'); R(0, y, ART_W, 1, '#8fd877'); for (let x = 3; x < ART_W; x += 9) R(x, y + 4 + (x % 3), 2, 1, '#5aa84c'); };
+  const roadStrip = (y = 40) => { grass(y); R(0, y + 2, ART_W, 6, '#4b4f5c'); for (let x = 2; x < ART_W; x += 12) R(x, y + 5, 6, 1, '#ffd21f'); };
+  const cloud = (x, y) => { circle(x, y, 4, '#ffffff'); circle(x + 5, y - 2, 5, '#ffffff'); circle(x + 10, y, 4, '#ffffff'); R(x, y, 10, 4, '#ffffff'); };
+  function heliAt(x, y) { const s0 = { x: heli.x, y: heli.y, hop: heli.hop }; Object.assign(heli, { x, y, hop: 0 }); drawHeli(); Object.assign(heli, s0); }
+  const ART = {
+    fire: () => { sky(); cloud(6, 10); roadStrip(); drawV(VI.fire, 3, 47, false, 0, T * 3, true); },
+    amb: () => { sky(); cloud(48, 9); roadStrip(); drawV(VI.amb, 5, 47, false, 0, T * 3, true); },
+    police: () => { sky(); cloud(8, 8); roadStrip(); drawV(VI.police, 8, 47, false, 0, T * 3, true); },
+    help: () => {
+      sky(); grass(42); drawTree(20, 45, 13);
+      drawCat(24, 20, 1, '#f5a24a');
+      drawPerson({ type: 'kid', x: 50, yb: 46, dir: -1, pose: 'wave', skin: SKIN[1], seed: 1 });
+      R(56, 4, 13, 14, INK); R(57, 5, 11, 12, '#ffffff'); R(58, 17, 3, 2, '#ffffff'); text('?', 60, 7, 2, '#2a6fe0');
+    },
+    wash: () => {
+      R(0, 0, ART_W, 40, '#bfe6ff'); for (let x = 0; x < ART_W; x += 8) R(x, 0, 4, 40, '#aed8f4');
+      R(0, 40, ART_W, 10, '#9aa3ad'); R(0, 40, ART_W, 1, '#cfd6dd');
+      drawV(VI.police, 8, 46, false, 0, 0, true);
+      for (const [bx, by, r] of [[14, 22, 5], [24, 18, 6], [36, 24, 5], [50, 20, 6], [60, 28, 4], [30, 32, 4], [44, 34, 3], [10, 34, 3]]) { circle(bx, by - Math.round(Math.sin(T * 2 + bx) * 1.5), r, '#ffffff'); circle(bx - 1, by - 1 - Math.round(Math.sin(T * 2 + bx) * 1.5), Math.max(1, r - 3), '#e6f6ff'); }
+      for (let i = 0; i < 6; i++) R(6 + i * 12, ((T * 40 + i * 9) % 30) | 0, 1, 3, '#4aa8e8');
+    },
+    icecream: () => {
+      R(0, 0, ART_W, ART_H, '#ffe0ec'); for (let i = 0; i < 9; i++) R(i * 8, 0, 4, 6, i % 2 ? '#ffffff' : '#e8222b');
+      for (let i = 0; i < 9; i++) circle(i * 8 + 2, 6, 2, i % 2 ? '#ffffff' : '#e8222b');
+      const ic = SCENES.icecream && SCENES.icecream._treat;
+      if (ic) { const b = Math.round(Math.sin(T * 3)); ic(0, 5, 47 + b, 2); ic(4, 27, 47, 2); ic(5, 49, 47 - b, 2); }
+    },
+    chopper: () => {
+      sky('#7cc8f8', '#b8e4ff'); cloud(4, 12); cloud(50, 30);
+      for (const [bx, bw, bh, c] of [[0, 10, 14, '#7f86ad'], [11, 9, 20, '#6a7090'], [21, 12, 10, '#8a90b4'], [34, 8, 18, '#6a7090'], [43, 12, 12, '#7f86ad'], [56, 9, 22, '#6a7090'], [66, 8, 15, '#8a90b4']]) {
+        R(bx, ART_H - bh, bw, bh, c); for (let y = ART_H - bh + 3; y < ART_H - 2; y += 4) for (let x = bx + 2; x < bx + bw - 2; x += 3) R(x, y, 1, 2, '#ffe873');
+      }
+      heliAt(18, 8 + Math.round(Math.sin(T * 2) * 2));
+    },
+    stickers: () => {
+      R(0, 0, ART_W, ART_H, '#c98a4b'); R(3, 3, ART_W - 6, ART_H - 6, '#fff2d8');
+      const star = (cx, cy, c) => { for (let k = 0; k < 5; k++) { const a = -Math.PI / 2 + k * 2 * Math.PI / 5; for (let d = 0; d < 7; d++) R(cx + Math.cos(a) * d - 1, cy + Math.sin(a) * d - 1, 3, 3, c); } circle(cx, cy, 3, c); };
+      star(16, 17, '#ffd21f');
+      const hx = 54, hy = 15; circle(hx - 4, hy - 2, 5, '#ff6fb4'); circle(hx + 4, hy - 2, 5, '#ff6fb4'); for (let k = 0; k < 9; k++) R(hx - 9 + k, hy + k - 1, 19 - 2 * k, 1, '#ff6fb4');
+      circle(35, 13, 6, '#e8222b'); R(34, 19, 2, 2, '#a3121d'); R(35, 21, 1, 9, '#5a3a22'); R(33, 10, 2, 2, '#ff8a8a');
+      drawDuck(20, 44, true, 1); drawDuck(28, 44, false, 1);
+      R(44, 30, 20, 12, '#e8222b'); R(46, 32, 6, 4, GLASS); circle(48, 43, 3, INK); circle(60, 43, 3, INK); R(56, 28, 4, 2, '#ffd21f');
+    },
+    movies: () => {
+      R(0, 0, ART_W, ART_H, '#2a1420'); R(0, 0, 8, ART_H, '#9c1420'); R(ART_W - 8, 0, 8, ART_H, '#9c1420');
+      R(9, 3, 54, 34, '#ffffff'); R(10, 4, 52, 32, '#8fd6ff'); R(10, 28, 52, 8, '#4b4f5c');
+      g.save(); g.beginPath(); g.rect(10, 4, 52, 32); g.clip(); drawV(VI.amb, 5, 35, false, 0, T * 3, true); g.restore();
+      const px = 52, py = 48; for (let k = 0; k < 4; k++) R(px + k * 3, py - 9, 2, 9, k % 2 ? '#ffffff' : '#e8222b');
+      circle(px + 2, py - 11, 3, '#fff6c8'); circle(px + 6, py - 12, 3, '#fff3a6'); circle(px + 10, py - 11, 3, '#fff6c8');
+      for (let x = 12; x < 44; x += 8) { R(x, 41, 7, 9, '#4a1a2a'); R(x, 40, 7, 2, '#6a2a3a'); }
+    },
+    drive: () => {
+      sky(); R(0, 30, ART_W, 20, '#6cbf5a');
+      for (let y = 30; y < ART_H; y++) { const hw = 4 + (y - 30) * 1.7; R(36 - hw, y, hw * 2, 1, '#4b4f5c'); }
+      for (let y = 32; y < ART_H; y += 6) R(35, y, 2, 3, '#ffd21f');
+      R(8, 12, 2, 30, '#3a3d46'); R(5, 4, 8, 18, '#2f3240'); circle(9, 8, 2, '#e8222b'); circle(9, 13, 2, '#5a4a1a'); circle(9, 18, 2, Math.floor(T * 1.5) % 2 ? '#3fe24a' : '#2a6a2a');
+      drawCar(20, 48, COLOR.blue.c, T * 4, 0);
+    },
+    wake: () => { sky('#ffd27a', '#ffe9b0'); grass(38); circle(36, 22, 12, '#ffd21f'); for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4 + T * 0.5; R(36 + Math.cos(a) * 17 - 1, 22 + Math.sin(a) * 17 - 1, 3, 3, '#ff9a3a'); } },
+    bed: () => {
+      R(0, 0, ART_W, ART_H, '#1c2350'); R(0, 30, ART_W, 20, '#252c5e');
+      for (const [x, y] of [[6, 6], [18, 14], [30, 4], [62, 30], [8, 26], [44, 8]]) if ((x + Math.floor(T * 2)) % 3) R(x, y, 1, 1, '#ffffff');
+      drawMoon(52, 18);
+      text('Z', 14, 30 - (Math.floor(T * 2) % 2), 2, '#ffffff'); text('Z', 24, 22 - (Math.floor(T * 2 + 1) % 2), 1, '#c6cdf0');
+      R(4, 42, 64, 8, '#3a3f78'); R(4, 40, 22, 4, '#ffffff'); R(26, 39, 42, 6, '#6a5acd'); R(26, 39, 42, 1, '#8a7aed');
+    },
+  };
+  function drawArt(k, cx, cy, maxW, maxH) {
+    if (!artCv) { artCv = document.createElement('canvas'); artCv.width = ART_W; artCv.height = ART_H; }
+    const ag = artCv.getContext('2d'), prev = g;
+    ag.clearRect(0, 0, ART_W, ART_H); g = ag;
+    try { (ART[k] || (() => ICONS[k](36, 25, 16)))(); } finally { g = prev; }
+    const z = Math.max(1, Math.floor(Math.min(maxW / ART_W, maxH / ART_H)));
+    const sw = Math.min(ART_W, Math.floor(maxW / z)), sh = Math.min(ART_H, Math.floor(maxH / z));   // crop when the tile is narrow
     g.imageSmoothingEnabled = false;
-    g.drawImage(iconCv, Math.round(cx - 20 * sc), Math.round(cy - 20 * sc), Math.round(40 * sc), Math.round(42 * sc));
+    g.drawImage(artCv, Math.floor((ART_W - sw) / 2), ART_H - sh, sw, sh, Math.round(cx - sw * z / 2), Math.round(cy - sh * z / 2), sw * z, sh * z);
   }
   function pickerTiles() {
     const kinds = btns.filter(btnShown).map(b => b.k), n = kinds.length;
@@ -716,10 +789,9 @@
         R(x + 2, y - 2, w - 4, h + 4, '#ffffff'); R(x - 2, y + 2, w + 4, h - 4, '#ffffff'); R(x, y, w, h, '#ffffff');
         R(x + 3, y + 3, w - 6, h - 6, TILE_BG[t.k] || '#eeeeee');
         const label = LABEL[t.k] || '';
-        const lh = 5 * ts + 8, sc = Math.max(1, Math.min(w - 16, h - lh - 10) / 42);
-        const icy = y + Math.round((h - lh - 42 * sc) / 2) + Math.round(20 * sc);   // icon sits fully above its label
-        if (t.k === 'bed' && bed.on) { roundButton(x + w / 2, icy, 16 * sc, '#ffd21f', true); drawSun0(x + w / 2, icy); }
-        else bigIcon(t.k, x + w / 2, icy, sc);
+        const lh = 5 * ts + 8, aw = w - 10, ah = h - lh - 8;
+        const icy = y + 5 + Math.round(ah / 2);   // the picture card sits above its label
+        drawArt(t.k === 'bed' && bed.on ? 'wake' : t.k, x + w / 2, icy, aw, ah);
         text(label, Math.round(x + (w - textWidth(label, ts)) / 2), y + h - lh + 2, ts, '#2a2a3a');
       });
     }
