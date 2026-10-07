@@ -13,8 +13,8 @@
   const END = 60;
 
   /* ---------- the cast, painted with smooth shapes and baked into crisp pixel sprites ---------- */
-  // Each sprite is drawn with canvas paths in world units, rasterized at the screen's own pixel
-  // size (Q pixels per world unit), snapped to its little palette and given a dark outline.
+  // Each sprite is drawn with canvas paths in world units, rasterized at one pixel per world unit
+  // (the same chunky pixels as everything else), snapped to its little palette and outlined.
   const BAKED = new Map();
   const hex = c => [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
   function bake(key, bw, bh, Q, pal, outline, draw) {
@@ -24,9 +24,9 @@
     cv = document.createElement('canvas');
     cv.width = Math.ceil(bw * Q) + 4; cv.height = Math.ceil(bh * Q) + 4;
     const c = cv.getContext('2d');
-    c.setTransform(Q, 0, 0, Q, cv.width / 2, cv.height - 2);
+    c.setTransform(Q, 0, 0, Q, Math.floor(cv.width / 2), cv.height - 2);
     c.lineCap = 'round'; c.lineJoin = 'round';
-    draw(c);
+    const details = draw(c) || [];
     const img = c.getImageData(0, 0, cv.width, cv.height), d = img.data, n = cv.width * cv.height;
     const P = pal.map(hex), O = hex(outline), solid = new Uint8Array(n);
     for (let i = 0; i < n; i++) {
@@ -44,6 +44,7 @@
       if ((x > 0 && solid[i - 1]) || (x < w - 1 && solid[i + 1]) || solid[i - w] || solid[i + w]) { d[i * 4] = O[0]; d[i * 4 + 1] = O[1]; d[i * 4 + 2] = O[2]; d[i * 4 + 3] = 255; }
     }
     c.putImageData(img, 0, 0);
+    for (const [dx, dy, dw, dh, col] of details) { c.fillStyle = col; c.fillRect(Math.round(dx), Math.round(dy), dw, dh); }   // crisp eyes, noses and tags
     if (BAKED.size > 600) BAKED.clear();
     BAKED.set(id, cv);
     return cv;
@@ -51,13 +52,14 @@
   // Draw a baked sprite with its feet at world (x, yb), using whatever zoom the canvas has right now.
   function stamp(key, bw, bh, pal, outline, draw, x, yb, dir = 1) {
     const m = g.getTransform(), z = Math.max(1, Math.round(m.a));
-    const Q = z <= 3 ? z : z % 3 === 0 ? 3 : z % 2 === 0 ? 2 : 3, k = z / Q;
+    const Q = 1, k = z;   // one sprite pixel per world pixel, like all the other pixel art
     const cv = bake(key, bw, bh, Q, pal, outline, draw);
     const px = Math.round(m.a * x + m.e), py = Math.round(m.d * yb + m.f);
     const dw = Math.round(cv.width * k), dh = Math.round(cv.height * k);
     g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.imageSmoothingEnabled = false;
-    if (dir < 0) { g.translate(px, 0); g.scale(-1, 1); g.drawImage(cv, -Math.round(dw / 2), py - dh + Math.round(2 * k), dw, dh); }
-    else g.drawImage(cv, px - Math.round(dw / 2), py - dh + Math.round(2 * k), dw, dh);
+    const ox = Math.floor(cv.width / 2) * k;
+    if (dir < 0) { g.translate(px, 0); g.scale(-1, 1); g.drawImage(cv, -ox, py - dh + 2 * k, dw, dh); }
+    else g.drawImage(cv, px - ox, py - dh + 2 * k, dw, dh);
     g.restore();
   }
   // little path helpers (c = the 2d context, units = world pixels)
@@ -69,6 +71,8 @@
     for (const [op, ...a] of cmds) op === 'M' ? c.moveTo(...a) : op === 'Q' ? c.quadraticCurveTo(...a) : op === 'Z' ? c.closePath() : c.lineTo(...a);
     if (fillIt) { c.closePath(); c.fillStyle = col; c.fill(); } else { c.strokeStyle = col; c.lineWidth = w; c.stroke(); }
   };
+  // where a point on a rotated, scaled head lands in sprite coordinates
+  const headPt = (ax, ay, rot, sc, lx, ly) => [ax + (lx * Math.cos(rot) - ly * Math.sin(rot)) * sc, ay + (lx * Math.sin(rot) + ly * Math.cos(rot)) * sc];
   // a dog's leg from the shoulder/hip to the paw, swinging with the gait
   function gait(o) {
     const run = !!o.run, walk = !run && o.step != null, frames = 8;
@@ -92,116 +96,99 @@
 
   /* the red Vizsla: lean and leggy, deep chest, long muzzle, big soft ear, amber eyes */
   const VZ = { V1: '#b4542a', V2: '#cf7040', V3: '#8e3c1a', V4: '#6e2c12', EAR: '#9a4420', NOSE: '#b86f62', EYE: '#e0a040', INK: '#22222a', COL: '#3d4a3a', RING: '#cfd6dd', TNG: '#e8708a', MTH: '#5a1a10', W: '#ffffff' };
-  const VZ_PAL = Object.values(VZ);
+  const VZ_PAL = [VZ.V1, VZ.V3, VZ.V4, VZ.EAR, VZ.COL, VZ.MTH];
   // o: { pose: stand|point|tilt|chew, run, step, hop, bark, wag, wet }
   function vizsla(x, yb, dir = 1, s = 1, o = {}) {
     const pose = o.pose || 'stand', gp = gait(o), wag = o.wag ? Math.floor(T * 8) % 2 : 0, bark = o.bark ? 1 : 0;
-    const key = `vz3:${pose}:${gp.f}:${gp.amp}:${wag}:${bark}`;
-    // proportions from the photo: about as long as he is tall, long legs, short back, deep chest
-    stamp(key, 66, 52, VZ_PAL, '#4a1e0a', c => {
+    const key = `vz4:${pose}:${gp.f}:${gp.amp}:${wag}:${bark}`;
+    // from a side profile: square build, long legs, deep chest, tucked belly, slim neck rising to a head held high
+    stamp(key, 64, 50, VZ_PAL, '#6e2c12', c => {
       const { V1, V2, V3, V4, EAR } = VZ;
-      const fl = legPts(true, 9.2, -17, gp, 0.5, 2.3), hl = legPts(false, -10.6, -19, gp, 0, 2.3);
-      drawLeg(c, fl, 3.4, 2.3, V3, V4); drawLeg(c, hl, 3.8, 2.3, V3, V4);
-      // tail, carried level
-      const tw = pose === 'point' ? 0 : wag ? -1.6 : 0.6;
-      line(c, [[-13.6, -24.2], [-18.6, -25.4 + tw * 0.5]], 2.5, V1); line(c, [[-18.6, -25.4 + tw * 0.5], [-23.4, -26.2 + tw]], 1.5, V1);
-      // torso: deep chest, tucked waist, short back
-      curve(c, [['M', -14, -24.6], ['Q', -2, -27.2, 8, -26.6], ['Q', 14.6, -25.6, 14.8, -19], ['Q', 14.2, -12.2, 8, -11.8], ['Q', 1, -12.2, -3.2, -16.2], ['Q', -10, -15.6, -14.6, -18.8], ['Q', -16, -22.2, -14, -24.6]], V1);
-      curve(c, [['M', 14.8, -17], ['Q', 14, -12.2, 8, -11.8], ['Q', 1, -12.2, -3.2, -16.2], ['Q', 1.4, -14, 7.4, -13.8], ['Q', 12.6, -14, 14.8, -17]], V3);
-      curve(c, [['M', -11.6, -25.2], ['Q', -2, -26.8, 8, -26]], V2, false, 1.1);
-      curve(c, [['M', 8.8, -23.4], ['Q', 10.8, -19.6, 9.4, -15.4]], V3, false, 0.7);
-      E(c, -9.8, -18.8, 5.2, 5.8, V1, 0.35);   // haunch
-      curve(c, [['M', -14, -15.8], ['Q', -10.4, -12.8, -6.6, -15.2]], V3, false, 0.8);
-      const nf = pose === 'point' ? [[10, -17], [13.6, -13], [12.4, -9.4], [12, -8.4], [13.6, -8.2]] : legPts(true, 10, -17, gp, 0, 2.3);
-      const nh = legPts(false, -9.6, -19, gp, 0.5, 2.3);
-      drawLeg(c, nh, 4, 2.4, V1, V3); drawLeg(c, nf, 3.6, 2.4, V1, V3);
-      // neck: thick at the shoulders, sloping forward (or bending down to chew), collar wrapped around
+      const fl = legPts(true, 8.6, -16.5, gp, 0.5, 2.2), hl = legPts(false, -10.4, -18.6, gp, 0, 2.2);
+      drawLeg(c, fl, 3, 2, V3, V4); drawLeg(c, hl, 3.6, 2, V3, V4);
+      // tail: carried level, slightly up
+      const tw = pose === 'point' ? 0 : wag ? -1.4 : 0.6;
+      line(c, [[-12.6, -22.8], [-17.4, -24 + tw * 0.5]], 2.2, V1); line(c, [[-17.4, -24 + tw * 0.5], [-21.6, -24.8 + tw]], 1.3, V1);
+      // body
+      curve(c, [['M', -12.6, -23.4], ['Q', -3, -25, 6, -24.4], ['Q', 12.6, -23.4, 13.6, -18.4], ['Q', 13, -11.6, 6.4, -11.2], ['Q', 0, -11.4, -3, -14.6], ['Q', -9.6, -14.2, -13.8, -17.6], ['Q', -15, -21.4, -12.6, -23.4]], V1);
+      curve(c, [['M', 13.6, -16], ['Q', 13, -11.6, 6.4, -11.2], ['Q', 0, -11.4, -3, -14.6], ['Q', 1, -12.8, 6, -12.8], ['Q', 11, -13, 13.6, -16]], V3);
+      E(c, -9.4, -17.6, 4.6, 5.2, V1, 0.35);
+      curve(c, [['M', -13.2, -15], ['Q', -10, -12.2, -6.4, -14.2]], V3, false, 0.9);
+      const nf = pose === 'point' ? [[9.6, -16.5], [12.8, -12.6], [11.6, -9.2], [11.2, -8.2], [12.8, -8]] : legPts(true, 9.6, -16.5, gp, 0, 2.2);
+      const nh = legPts(false, -9.4, -18.6, gp, 0.5, 2.2);
+      drawLeg(c, nh, 3.8, 2.2, V1, V3); drawLeg(c, nf, 3.2, 2.2, V1, V3);
+      // neck: slim, rising from the withers; bends down to chew
       const chew = pose === 'chew';
       const neck = chew
-        ? [['M', 2, -26.6], ['Q', 10, -28.6, 15.6, -24], ['L', 20, -18.4], ['L', 16.6, -13.4], ['Q', 14, -12.6, 9, -12.4], ['Z']]
-        : [['M', 2, -26.6], ['Q', 7.6, -33.6, 12.6, -36.4], ['L', 19, -32.8], ['Q', 18.2, -26, 14.6, -18.6], ['Z']];
+        ? [['M', 6, -24.2], ['Q', 11, -24.6, 15, -20.4], ['L', 17.4, -16.6], ['L', 14.6, -13.4], ['Q', 12.6, -15.4, 11.6, -17.6], ['Q', 10, -19.6, 8, -19.4], ['Z']]
+        : [['M', 5.4, -24.4], ['Q', 9.4, -28, 11.6, -33.4], ['L', 16.8, -30.6], ['Q', 14.6, -24.4, 13.2, -18.6], ['Q', 10, -20.6, 5.4, -24.4]];
       curve(c, neck, V1);
-      if (!chew) { curve(c, [['M', 18.2, -29.6], ['Q', 17.4, -23.6, 14.8, -19.4]], V3, false, 0.9); curve(c, [['M', 4, -27], ['Q', 8.2, -32.8, 12.2, -35.4]], V2, false, 0.8); }
       c.save(); curve(c, neck, V1); c.clip();
-      if (chew) poly(c, [[11.8, -30], [13.8, -30], [13.8, -10], [11.8, -10]], VZ.COL);
-      else poly(c, [[8, -35.2], [20, -30], [19.4, -28.2], [7.4, -33.4]], VZ.COL);
+      if (chew) poly(c, [[12, -24], [13.6, -24], [13.6, -12], [12, -12]], VZ.COL);
+      else poly(c, [[8.6, -30], [16.8, -26.6], [16.4, -25.2], [8.2, -28.6]], VZ.COL);
       c.restore();
-      if (chew) E(c, 12.8, -12.6, 0.9, 0.9, VZ.RING); else E(c, 18, -27.8, 0.9, 0.9, VZ.RING);
-      // head: a good size, long muzzle, big soft ear
-      c.save();
-      if (chew) { c.translate(18, -19.6); c.rotate(0.75); }
-      else { c.translate(16.2, -35.6); if (pose === 'tilt') c.rotate(-0.28); }
-      c.scale(1.12, 1.12);
-      E(c, 1.4, -1.4, 5, 4.3, V1);
-      curve(c, [['M', 3, -3.9], ['L', 9.6, -3.3], ['Q', 12.2, -2.9, 12.1, -0.8], ['L', 11.6, 0.7], ['Q', 8, 1.8, 3, 1.6], ['Z']], V1);
-      curve(c, [['M', 3.2, -3.7], ['L', 10, -3.1]], V2, false, 0.9);
-      E(c, 0.6, -4.2, 3, 1, V2);
-      if (bark) { poly(c, [[5, 1], [11.6, 0.4], [10.4, 3.2], [5.2, 2.4]], VZ.MTH); E(c, 8.4, 2.4, 1.4, 0.8, VZ.TNG); curve(c, [['M', 4.8, 2.2], ['L', 10.4, 3.4], ['Q', 8, 4.6, 5, 3.6], ['Z']], V1); }
-      E(c, 11.9, -1.9, 1.25, 1.1, VZ.NOSE);
-      if (!bark) curve(c, [['M', 11.4, 0.6], ['L', 5.6, 1.1]], V4, false, 0.6);
-      E(c, 5.3, -2.5, 1.05, 0.95, VZ.EYE); E(c, 5.6, -2.5, 0.55, 0.62, VZ.INK); E(c, 5.3, -2.9, 0.25, 0.25, VZ.W);
-      curve(c, [['M', 4, -3.9], ['L', 6.6, -3.6]], V3, false, 0.6);
-      if (pose === 'tilt') curve(c, [['M', -1.6, -4.6], ['Q', 2, -6.2, 3.4, -3], ['Q', 4.4, 1, 1.6, 3.4], ['Q', -1.6, 2.6, -2.6, -0.8], ['Z']], EAR);
-      else curve(c, [['M', -1.8, -4.6], ['Q', 3.2, -5, 2.9, 0.6], ['Q', 2.5, 6.6, -0.4, 7.6], ['Q', -3.1, 4.6, -2.9, -0.5], ['Z']], EAR);
-      curve(c, [['M', 0.4, -3.4], ['Q', 1.2, 1.4, 0, 5.4]], V3, false, 0.6);
+      // head: long muzzle, big soft ear
+      const ax = chew ? 16.2 : 14, ay = chew ? -16.6 : -33, rot = chew ? 0.85 : pose === 'tilt' ? -0.28 : 0, hs = 1.3;
+      c.save(); c.translate(ax, ay); c.rotate(rot); c.scale(hs, hs);
+      E(c, 0.6, -1.2, 3.8, 3.4, V1);
+      curve(c, [['M', 1.6, -3.4], ['L', 8.6, -2.6], ['Q', 10.6, -2.2, 10.6, -0.4], ['L', 10.2, 0.8], ['Q', 6.6, 1.8, 1.4, 1.6], ['Z']], V1);
+      if (bark) { poly(c, [[4.6, 1], [10.2, 0.6], [9, 3], [4.8, 2.4]], VZ.MTH); curve(c, [['M', 4.4, 2.2], ['L', 9, 3.2], ['Q', 7, 4.2, 4.6, 3.4], ['Z']], V1); }
+      if (pose === 'tilt') curve(c, [['M', -2, -3.8], ['Q', 1.4, -5.4, 2.6, -2.4], ['Q', 3.2, 1, 0.8, 2.8], ['Q', -2, 2, -2.8, -0.8], ['Z']], EAR);
+      else curve(c, [['M', -2.2, -3.6], ['Q', 2, -4.2, 1.8, 0.6], ['Q', 1.6, 5.2, -0.6, 5.8], ['Q', -2.8, 3.6, -2.8, -0.4], ['Z']], EAR);
       c.restore();
+      const P = (lx, ly) => headPt(ax, ay, rot, hs, lx, ly), eye = P(4.4, -2.2), nose = P(10.1, -1.4);
+      const ring = chew ? [12.4, -12.8] : [16.4, -25.4];
+      return [[eye[0] - 1, eye[1], 1, 1, VZ.EYE], [eye[0], eye[1], 1, 1, VZ.INK], [nose[0] - 1, nose[1], 2, 1, VZ.NOSE], [ring[0], ring[1], 1, 1, VZ.RING]];
     }, x, yb - (o.hop || 0), dir);
     if (o.wet) for (let i = 0; i < 4; i++) R(Math.round(x - 16 + i * 9), Math.round(yb - 8 + ((T * 30 + i * 7) % 10)), 1, 2, '#8ec8f0');
   }
 
-  /* the white husky: big fluffy ruff, fox-like face, pointy ears, blue eyes, plume tail curled up high */
+  /* the white husky: thick coat, ruff around the neck, upright pointy ears, blue eyes, bushy tail */
   const HK = { H1: '#f6f6f2', H2: '#ffffff', H3: '#d8dce6', H4: '#b4bcca', PINK: '#f2a8a0', NOSE: '#2a2a30', EYE: '#6aaee8', INK: '#22222a', TNG: '#e8708a', LIP: '#5a5a66' };
-  const HK_PAL = Object.values(HK);
+  const HK_PAL = [HK.H1, HK.H3, HK.H4, HK.PINK, HK.LIP, HK.TNG];
   // o: { pose: stand|howl|chew, run, step, hop, pant, wag, bark }
   function husky(x, yb, dir = 1, s = 1, o = {}) {
     const pose = o.pose || 'stand', gp = gait(o), wag = o.wag ? Math.floor(T * 7) % 2 : 0, pant = o.pant ? 1 : 0, bark = o.bark ? 1 : 0;
-    const key = `hk3:${pose}:${gp.f}:${gp.amp}:${wag}:${pant}:${bark}`;
-    stamp(key, 62, 60, HK_PAL, '#7e8698', c => {
+    const key = `hk4:${pose}:${gp.f}:${gp.amp}:${wag}:${pant}:${bark}`;
+    stamp(key, 64, 50, HK_PAL, '#9aa2b2', c => {
       const { H1, H2, H3, H4 } = HK;
-      const fl = legPts(true, 8.4, -17, gp, 0.5, 3.2), hl = legPts(false, -9.6, -18.6, gp, 0, 3.2);
-      drawLeg(c, fl, 4.4, 3.4, H3, H4); drawLeg(c, hl, 4.8, 3.4, H3, H4);
-      // the plume tail, curled up over the back
-      const tw = wag ? 1 : 0;
-      const plume = [[-12.4, -27, 3.2], [-15, -31, 3.5], [-13.6, -35 - tw, 3.4], [-9.8, -36 - tw, 3], [-6.8, -34.2 - tw, 2.3]];
-      for (const [px, py, r] of plume) E(c, px + 0.7, py + 0.8, r, r, H3);
-      for (const [px, py, r] of plume) E(c, px, py, r, r, H1);
-      curve(c, [['M', -11.6, -28.6], ['Q', -13.6, -32.6, -10.6, -33.6], ['Q', -8.6, -33.8, -7.4, -32.6]], H3, false, 0.9);   // the curl
-      // body: deep chest, a little tuck, fluffy fringe underneath
-      curve(c, [['M', -13, -26.4], ['Q', -2, -30, 8, -29], ['Q', 14, -27.6, 14.4, -21], ['Q', 13.8, -15, 7.4, -14.4], ['Q', 0, -14.6, -4, -17], ['Q', -11, -16.6, -14.4, -20.6], ['Q', -15.2, -24.6, -13, -26.4]], H1);
-      for (let i = 0; i < 7; i++) E(c, -6 + i * 2.4, -14.8 + (i % 2) * 0.4, 1.7, 1.5, i % 2 ? H3 : H1);
-      curve(c, [['M', -10.6, -27.6], ['Q', -2, -29.8, 6, -29]], H3, false, 0.7);   // back line
-      E(c, -1.6, -27.4, 7, 1.4, H2);
-      E(c, -9.4, -20.4, 5.8, 6.6, H1); curve(c, [['M', -14, -16.4], ['Q', -9.6, -13.2, -5, -15.8]], H3, false, 0.9);
-      // near legs: sturdy, with fluffy "pants"
-      const nf = legPts(true, 9.4, -17, gp, 0, 3.2), nh = legPts(false, -8.6, -18.6, gp, 0.5, 3.2);
-      drawLeg(c, nh, 5, 3.6, H1, H3); drawLeg(c, nf, 4.6, 3.6, H1, H3);
-      E(c, -11.6, -13.4, 2.4, 3, H1);
-      // chest ruff and mane
-      E(c, 10, -23, 6.2, 7.4, H1); E(c, 11, -17.4, 3.6, 2.8, H1); E(c, 11.4, -16.2, 2.4, 1.4, H3);
-      E(c, 11.6, -30, 6.4, 7.6, H1, -0.35);
-      for (let i = 0; i < 4; i++) E(c, 6.2 + i * 2.2, -22.4 + (i % 2), 1.5, 1.3, H1);
-      // head: a fox-like wedge with a smile
-      c.save();
-      if (pose === 'chew') { c.translate(17.8, -21.4); c.rotate(0.7); }
-      else if (pose === 'howl') { c.translate(15.6, -37); c.rotate(-0.95); }
-      else c.translate(16.4, -35.6);
-      c.scale(1.12, 1.12);
-      const ear = (ex, sh) => { poly(c, [[ex - 2.2, -5.8], [ex + 0.8 + sh, -13.4], [ex + 3.4, -6.2]], H1); poly(c, [[ex - 0.7, -6.6], [ex + 0.9 + sh, -11.2], [ex + 2.2, -6.8]], HK.PINK); };
-      ear(0.2, -0.4); ear(4.6, 0.6);
-      E(c, 1.6, -2, 6.2, 5.4, H1);
-      E(c, 0.4, 1.8, 4.8, 3.6, H1);   // cheek fluff
-      curve(c, [['M', 4.4, -3.6], ['L', 11.4, -1.6], ['Q', 12.2, -0.6, 11.4, 0.9], ['L', 4.4, 2.2], ['Z']], H1);
-      curve(c, [['M', 5, 2], ['L', 11.2, 0.9]], H3, false, 0.9);
-      if (pose === 'howl') { E(c, 9.6, 1.4, 1.7, 1.3, HK.LIP); E(c, 6, -3, 1.2, 0.35, HK.INK); }
-      else {
-        if (bark || pant) { poly(c, [[6.4, 1.3], [11.2, 0.9], [10.4, 3.4], [6.8, 3]], HK.LIP); E(c, 8.6, 3.5, 1.5, 2, HK.TNG); }
-        else curve(c, [['M', 11, 0.9], ['Q', 8.6, 2.6, 6.2, 1.6]], HK.LIP, false, 0.6);
-        E(c, 6, -2.8, 1.35, 1, HK.EYE); E(c, 6.3, -2.8, 0.6, 0.66, HK.INK); E(c, 5.9, -3.15, 0.27, 0.27, H2);
-        curve(c, [['M', 4.5, -3.7], ['Q', 6, -4.4, 7.6, -3.7]], HK.LIP, false, 0.45);
-      }
-      E(c, 11.5, -0.9, 1.4, 1.2, HK.NOSE);
-      E(c, 0.6, -4.9, 3.6, 1.1, H2);
+      const fl = legPts(true, 9, -15.6, gp, 0.5, 2.8), hl = legPts(false, -11, -17.6, gp, 0, 2.8);
+      drawLeg(c, fl, 3.8, 3, H3, H4); drawLeg(c, hl, 4.4, 3, H3, H4);
+      // bushy tail, curving up over the back when wagging
+      if (wag) { for (const [px, py, r] of [[-14, -24, 2.6], [-16.4, -27, 3], [-15, -30.4, 3], [-11.6, -31, 2.4]]) E(c, px, py, r, r, H1); curve(c, [['M', -14.4, -26], ['Q', -15.4, -29, -12.6, -29.6]], H3, false, 0.8); }
+      else { for (const [px, py, r] of [[-14.2, -22, 2.6], [-17, -19.6, 3], [-18.6, -16, 2.8], [-18.4, -12.4, 2.2]]) E(c, px, py, r, r, H1); curve(c, [['M', -15.6, -20.4], ['Q', -17.6, -17, -17.4, -13]], H3, false, 0.8); }
+      // body: a level back, deep chest, thick fur underneath
+      curve(c, [['M', -13.4, -24.4], ['Q', -2, -25.6, 7, -25], ['Q', 14.2, -24, 15, -18], ['Q', 14.4, -12.2, 7.6, -11.8], ['Q', 0, -12, -4, -13.8], ['Q', -11, -13.4, -15, -17.4], ['Q', -16, -22, -13.4, -24.4]], H1);
+      for (let i = 0; i < 6; i++) E(c, -6 + i * 2.6, -12.4 + (i % 2) * 0.4, 1.4, 1.2, i % 2 ? H3 : H1);
+      curve(c, [['M', -11, -24.8], ['Q', -2, -25.6, 6, -25]], H2, false, 1);
+      E(c, -10.6, -17.8, 4.6, 5.4, H1); curve(c, [['M', -14.6, -14.4], ['Q', -11, -12, -7, -13.8]], H3, false, 0.9);
+      const nf = legPts(true, 10, -15.6, gp, 0, 2.8), nh = legPts(false, -10, -17.6, gp, 0.5, 2.8);
+      drawLeg(c, nh, 4.6, 3.2, H1, H3); drawLeg(c, nf, 4, 3.2, H1, H3);
+      // neck: shorter and thicker than the Vizsla's, with a fur ruff down the front
+      const chew = pose === 'chew';
+      const neck = chew
+        ? [['M', 6, -25], ['Q', 11.6, -25.6, 15.6, -21], ['L', 18, -16.8], ['L', 15, -13], ['Q', 12, -15, 10.6, -17.6], ['Z']]
+        : pose === 'howl' ? [['M', 6, -25.2], ['Q', 9.6, -29.4, 11.8, -32.4], ['L', 17.6, -29.4], ['Q', 16.6, -23, 15, -17.4], ['Q', 11, -20, 6, -25.2]]
+        : [['M', 6.4, -25.2], ['Q', 10.6, -27.6, 13, -30.2], ['L', 18.6, -26.6], ['Q', 17.4, -22, 15.2, -17.4], ['Q', 11, -20, 6.4, -25.2]];
+      curve(c, neck, H1);
+      if (!chew) for (let i = 0; i < 4; i++) E(c, 16.6 - i * 0.6, -25.4 + i * 2.2, 1.6, 1.4, i % 2 ? H3 : H1);   // ruff
+      // head: rounded skull, medium wedge muzzle, ears up
+      const ax = chew ? 16.6 : pose === 'howl' ? 14.4 : 16, ay = chew ? -17.4 : pose === 'howl' ? -32.6 : -30.4, rot = chew ? 0.85 : pose === 'howl' ? -0.95 : 0, hs = 1.3;
+      c.save(); c.translate(ax, ay); c.rotate(rot); c.scale(hs, hs);
+      const ear = (ex, col) => { poly(c, [[ex - 1.6, -3.4], [ex + 0.4, -9.2], [ex + 2.4, -3.6]], col); };
+      ear(-0.6, H3); ear(1.6, H1); poly(c, [[2.1, -4.2], [2, -7.6], [3.3, -4.2]], HK.PINK);
+      E(c, 1, -1.2, 4.2, 3.6, H1);
+      E(c, -0.6, 1.4, 3.2, 2.2, H1);   // cheek fluff
+      curve(c, [['M', 3, -2.6], ['L', 9.2, -1.2], ['Q', 10, -0.4, 9.4, 0.8], ['L', 3, 1.8], ['Z']], H1);
+      if (pose === 'howl') E(c, 8.8, 1.2, 1.2, 1, HK.LIP);
+      else if (bark || pant) { poly(c, [[5.2, 1.1], [9.2, 0.8], [8.4, 2.8], [5.6, 2.4]], HK.LIP); E(c, 7, 2.8, 1.1, 1.5, HK.TNG); }
+      else curve(c, [['M', 9, 0.8], ['L', 5, 1.4]], HK.LIP, false, 0.6);
       c.restore();
+      const P = (lx, ly) => headPt(ax, ay, rot, hs, lx, ly), eye = P(4.6, -2), nose = P(9.4, -0.8);
+      const out = [[nose[0] - 1, nose[1] - 1, 2, 2, HK.NOSE]];
+      if (pose === 'howl') out.push([eye[0] - 1, eye[1], 2, 1, HK.INK]);
+      else out.push([eye[0] - 1, eye[1], 1, 1, HK.EYE], [eye[0], eye[1], 1, 1, HK.INK]);
+      return out;
     }, x, yb - (o.hop || 0), dir);
   }
 
