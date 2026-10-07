@@ -5,16 +5,17 @@
     { kind: 'fire', scene: 'movieFire', i: VI.fire, bg: '#e8222b' },
     { kind: 'police', scene: 'moviePolice', i: VI.police, bg: '#2a6fe0' },
     { kind: 'amb', scene: 'movieAmb', i: VI.amb, bg: '#f4f7fb' },
+    { kind: 'book', scene: 'movieBook', cover: true, bg: '#e2b440', sky: '#f4c8b2' },
   ];
   const st = { cards: [], watched: null, t: 0, scale: 1 };
   let tmp = null;
 
   // Draw a vehicle scaled up by an integer factor, keeping the pixels crisp.
-  function drawVBig(i, cx, yb, scale, lit) {
+  function drawVBig(i, cx, yb, scale, lit, art) {
     if (!tmp) { tmp = document.createElement('canvas'); tmp.width = 72; tmp.height = 46; }
     const tg = tmp.getContext('2d'), prev = g;
     tg.clearRect(0, 0, 72, 46);
-    g = tg; drawV(i, 3, 44, lit, 0, T * 6, true); g = prev;
+    g = tg; if (art) art(3, 44); else drawV(i, 3, 44, lit, 0, T * 6, true); g = prev;
     g.imageSmoothingEnabled = false;
     g.drawImage(tmp, Math.round(cx - 36 * scale), Math.round(yb - 44 * scale), 72 * scale, 46 * scale);
   }
@@ -80,9 +81,9 @@
     if (watched) alpha(0.5 + 0.3 * Math.sin(T * 5), () => { R(x - 4, y - 2, c.w + 8, c.h + 4, '#ffd21f'); R(x - 2, y - 4, c.w + 4, c.h + 8, '#ffd21f'); });
     R(x, y + 3, c.w, c.h, '#140a10');
     R(x + 2, y, c.w - 4, c.h, '#ffffff'); R(x, y + 2, c.w, c.h - 4, '#ffffff');
-    R(x + 4, y + 4, c.w - 8, c.h - 16, mix('#8fd6ff', '#141a45', nightK() * 0.6));
+    R(x + 4, y + 4, c.w - 8, c.h - 16, mix(c.e.sky || '#8fd6ff', '#141a45', nightK() * 0.6));
     R(x + 4, y + c.h - 18, c.w - 8, 6, '#4b4f5c'); R(x + 4, y + c.h - 12, c.w - 8, 8, c.e.bg);
-    drawVBig(c.e.i, x + c.w / 2, y + c.h - 16, st.scale, true);
+    drawVBig(c.e.i, x + c.w / 2, y + c.h - 16, st.scale, true, c.e.cover && ((x0, yb) => SCENES[c.e.scene].cover(x0 + 10, yb)));
     // play badge
     const bx = x + c.w - 13, byy = y + 12;
     circle(bx, byy, 8, '#ffd21f'); circle(bx, byy, 6, '#e8222b');

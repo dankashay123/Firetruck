@@ -12,6 +12,7 @@ A pixel-art toy for a toddler who loves fire trucks. One page, no build step, no
   - **Red cross: ambulance mission.** Help a hurt kid, hold the go button to drive to the hospital.
   - **Star: police mission.** Stop the traffic so ducks and people can cross.
   - **Heart: Who Comes to Help?** Pick the right vehicle for each problem.
+  - **Movie screen: the cinema.** Short cartoons to watch: the fire truck, the police car, the ambulance, and a sing-along of *Little Blue Truck* (Blue, the big dump truck, the toad, the goat and the farm animals) drawn from our own copy of the book.
   - **Moon: bedtime.** Night falls; tap each vehicle to roll its garage door down. Then the lights go out, the dog curls up and a lullaby plays. Tap the sun button or the moon to wake everyone up.
 - Hidden surprises: the **bell** on the tower, the **dog**, the **fire hydrant** and the **helicopter**.
 
@@ -20,6 +21,7 @@ There is no way to lose and nothing to read.
 ## Code layout
 - `js/core.js`: shared engine (canvas, sprites, sound, day/night sky, scene system, input).
 - `js/station.js`, `js/fire.js`, `js/help.js`, `js/amb.js`, `js/police.js`: one file per scene, each registering `SCENES.<name>`.
+- `js/book_art.js`, `js/movie_book.js`: the *Little Blue Truck* sing-along. The story runs one beat per sung page; a parent's recording in `audio/movie-book.mp3` (one take, a short pause at each page turn) plays along when present, and the page start times go in `SONG_PAGES`. Without it the cartoon plays with little beeps and animal noises.
 - `js/main.js`: boot and main loop. `index.html#fire` (or `#help`, `#amb`, `#police`) jumps straight into a scene after Play.
 
 ## Run it
