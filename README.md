@@ -47,3 +47,9 @@ The Big Bone Adventure uses free public-domain (CC0) sounds from OpenGameArt.org
 - Bear: "Bear Growls" (`audio/bear-roar.mp3`)
 - Splash: "6 Short Water Splashes" (`audio/splash.mp3`)
 - Crunch: "Crunchy Bite" (`audio/crunch.mp3`)
+
+Little Blue Truck uses CC0 sounds from OpenGameArt.org too:
+- Music: "Apple Cider" by Zane Little Music (`audio/bt-music.mp3`); it plays only while there's no sung recording
+- Farm animals: "Baby Animals Sounds Pack" (moo, baa, goat, pig, chick, horse) and "Frog Croaks"
+- Horns: the car horn from "Car Sound Effects Pack", pitched up for Blue's beep and down for the dump truck's honk
+- Mud: "25 CC0 mud SFX"

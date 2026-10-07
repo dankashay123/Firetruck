@@ -1,6 +1,6 @@
 // Offline support: everything the game needs is cached on first visit.
 // Bump VERSION whenever any file changes so devices pick up the update.
-const VERSION = 'fire-station-v34';
+const VERSION = 'fire-station-v35';
 const FILES = [
   './',
   './index.html',
@@ -26,6 +26,17 @@ const FILES = [
   './manifest.webmanifest',
   './icon-180.png',
   './icon-512.png',
+  './audio/bt-beep.mp3',
+  './audio/bt-honk.mp3',
+  './audio/bt-moo.mp3',
+  './audio/bt-baa.mp3',
+  './audio/bt-oink.mp3',
+  './audio/bt-maa.mp3',
+  './audio/bt-neigh.mp3',
+  './audio/bt-peep.mp3',
+  './audio/bt-croak.mp3',
+  './audio/bt-splat.mp3',
+  './audio/bt-music.mp3',
   './audio/dog-bark.mp3',
   './audio/dog-bark-2.mp3',
   './audio/bear-roar.mp3',

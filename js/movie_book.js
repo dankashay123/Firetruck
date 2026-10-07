@@ -259,7 +259,37 @@
     SPLAT() { noise(0, 0.35, 0.12, 500, 0.6); tone('sine', 180, 0, 0.2, 0.08, 70); },
     YAY() { [523, 659, 784, 1047].forEach((f, i) => tone('sine', f, i * 0.08, 0.25, 0.07)); },
   };
-  const sound = w => { if (!singing() && SOUND[w]) SOUND[w](); };
+  // Real recordings (CC0, from OpenGameArt) take over from the synth when they've loaded.
+  const FILES = { BEEP: ['bt-beep', 0.8], HONK: ['bt-honk', 0.75], MOO: ['bt-moo', 0.8], BAA: ['bt-baa', 0.8], OINK: ['bt-oink', 0.7], MAA: ['bt-maa', 0.8], NEIGH: ['bt-neigh', 0.7], PEEP: ['bt-peep', 0.7], CROAK: ['bt-croak', 0.9], SPLAT: ['bt-splat', 0.9] };
+  const bufs = {}, music = { buf: null, src: null, gain: null };
+  let audioLoaded = false;
+  function loadAudio() {
+    if (audioLoaded || !ac) return;
+    audioLoaded = true;
+    const get = name => fetch('audio/' + name + '.mp3').then(r => r.ok ? r.arrayBuffer() : null).then(ab => ab && ac.decodeAudioData(ab)).catch(() => null);
+    for (const [w, [name]] of Object.entries(FILES)) get(name).then(b => { if (b) bufs[w] = b; });
+    get('bt-music').then(b => { if (b) music.buf = b; });
+  }
+  function playSound(w) {
+    const b = bufs[w];
+    if (!b) { if (SOUND[w]) SOUND[w](); return; }
+    const src = ac.createBufferSource(), gn = ac.createGain();
+    src.buffer = b; src.playbackRate.value = 0.95 + Math.random() * 0.1; gn.gain.value = FILES[w][1];
+    src.connect(gn); gn.connect(master); src.start();
+  }
+  const sound = w => { if (!singing()) playSound(w); };
+  // gentle background music, only while nobody is singing (a sung recording replaces it)
+  function stopMusic() { if (music.src) { try { music.src.stop(); } catch (e) {} music.src = null; } }
+  function musicTick() {
+    if (!music.buf || !ac || song.buf) { stopMusic(); return; }
+    if (!music.src && st.t < endT() - 1) {
+      const src = ac.createBufferSource(), gn = ac.createGain();
+      src.buffer = music.buf; src.loop = true; gn.gain.value = 0;
+      src.connect(gn); gn.connect(master); src.start(0, st.t % music.buf.duration);
+      music.src = src; music.gain = gn;
+    }
+    if (music.gain) music.gain.gain.value = 0.28 * clamp01(st.t / 1.5) * clamp01((endT() - 0.3 - st.t) / 2.5);
+  }
 
   /* ---------- weather on top of the picture (screen space) ---------- */
   function drawRain(k = 1, c = '#aebac2') {
@@ -804,7 +834,7 @@
     Object.assign(st, { t: 0, done: false, s: -1, shot: -1, fired: {}, paused: false, ui: 0, drag: null });
     if (!st.saved) st.saved = clouds;
     clouds = [];
-    loadSong();
+    loadSong(); loadAudio();
   }
   function stopSong() { if (song.src) { const src = song.src; song.src = null; try { src.stop(); } catch (e) {} } }
   function startSong() {   // play the recording from wherever the story is now
@@ -818,12 +848,12 @@
   }
   /* ---------- player controls: pause and a draggable timeline ---------- */
   function seek(t) {
-    stopSong();
+    stopSong(); stopMusic();
     st.t = Math.max(0, Math.min(endT() - 0.05, t));
     st.fired = {}; parts = [];
     setCamNow();
   }
-  function togglePause() { st.paused = !st.paused; if (st.paused) stopSong(); }
+  function togglePause() { st.paused = !st.paused; if (st.paused) { stopSong(); stopMusic(); } }
   function ctl() {   // layout of the controls (screen pixels)
     const b = 26, cy = H - L.safeB - 30, cx = Math.round(W / 2), half = Math.round(Math.min(W - L.safeL - L.safeR - 32, 360) / 2);
     return { play: { x: cx - b / 2, y: cy - b / 2, s: b }, track: { x0: cx - half, x1: cx + half, y: cy - b / 2 - 14 } };
@@ -850,7 +880,7 @@
   }
   function setCamNow() { const w = where(uAt(st.t)); w.shot.cam.call(w.shot, w.su); }
   function leave() {
-    stopSong();
+    stopSong(); stopMusic();
     if (st.rain) st.rain(0);
     if (st.saved) { clouds = st.saved; st.saved = null; }
   }
@@ -864,18 +894,20 @@
     st.ui = Math.max(0, st.ui - dt);
     if (st.paused || st.drag != null) {   // hold the picture still (it keeps breathing) and stay quiet
       if (st.rain) st.rain(0);
+      stopMusic();
       setCamNow();
       return;
     }
     if (song.src) st.t = INTRO + (ac.currentTime - song.t0);
     else st.t += dt;
     startSong();
+    musicTick();
     const U = uAt(st.t), w = where(U);
     if (w.s !== st.s || w.shotI !== st.shot) { st.s = w.s; st.shot = w.shotI; }
     // bubbles' noises, numbers and extra sounds
     (w.sc.words || []).forEach(([u, word], i) => { const key = w.s + 'w' + i; if (w.su >= u && w.su < u + 0.3 && !st.fired[key]) { st.fired[key] = true; sound(word); } });
     (w.sc.numbers || []).forEach(([u], i) => { const key = w.s + 'n' + i; if (w.su >= u && w.su < u + 0.3 && !st.fired[key]) { st.fired[key] = true; if (!singing()) tone('sine', 523 + i * 131, 0, 0.25, 0.08); } });
-    (w.sc.noises || []).forEach(([u, n], i) => { const key = w.s + 'x' + i; if (w.su >= u && w.su < u + 0.3 && !st.fired[key]) { st.fired[key] = true; if (SOUND[n]) SOUND[n](); } });
+    (w.sc.noises || []).forEach(([u, n], i) => { const key = w.s + 'x' + i; if (w.su >= u && w.su < u + 0.3 && !st.fired[key]) { st.fired[key] = true; playSound(n); } });
     if (!st.rain) st.rain = noiseLoop(2600, 0.4);
     st.rain(w.sc.rain ? w.sc.rain * 0.05 : 0);
     w.shot.cam.call(w.shot, w.su);
@@ -948,6 +980,7 @@
     move(x, y, id) { if (st.drag === id) { st.ui = 3.5; seek(tAtX(ctl(), x)); } },
     release(id) { if (st.drag === id) { st.drag = null; st.ui = 3.5; } },
     // test hooks
+    _audio: () => ({ sfx: Object.keys(bufs), music: !!music.buf, playing: !!music.src }),
     _st: st, _jump(U) { st.t = tAtU(U); }, _ctl: () => ctl(), _song: () => ({ loaded: !!song.buf, playing: !!song.src, at: song.src ? +(ac.currentTime - song.t0).toFixed(2) : null }),
   };
 })();
