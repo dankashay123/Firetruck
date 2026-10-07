@@ -186,7 +186,7 @@
         if (c.dog) play(c.dog === 'husky' ? 'bark2' : 'bark');
         sparkle(handX(c), handY(c) - 8, 10, 10, '#fff6b0');
         for (let i = 0; i < 3; i++) hearts.push({ x: c.x + rand(-6, 6), y: Y.yG - 24, vy: -rand(14, 22), life: 1.4 });
-        if (st.served % 5 === 0) { confetti(30); say(pick('wow')); }
+        if (st.served % 5 === 0) { confetti(30); play('bell', 1.25); }
       }
     }
     for (const c of st.q) if (c.state === 'happy' && c.t > 1.1) { c.state = 'leave'; st.leaving.push(c); }
