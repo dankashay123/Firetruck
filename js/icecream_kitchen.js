@@ -280,6 +280,10 @@
     R(x, y, 13, 8, '#fff6ea'); R(x + 13, y + 3, 5, 5, '#ff8fb8'); R(x + 14, y + 4, 3, 2, '#bfe6ff'); R(x, y + 6, 18, 2, '#ff8fb8');
     R(x + 3, y + 2, 5, 3, '#8a6a7a'); circle(x + 4, y + 9, 2, '#2f3240'); circle(x + 14, y + 9, 2, '#2f3240'); R(x + 5, y - 4, 3, 4, '#ffd0e4');
   }
+  const HAND = ['..oo....', '.owwo...', '.owwo...', '.owwooo.', '.owwwwwo', 'oowwwwwo', 'owwwwwwo', 'owwwwwwo', '.owwwwo.', '..oooo..'];
+  function hand(x, y, z) {   // a white pointing hand, finger up top
+    HAND.forEach((row, j) => [...row].forEach((c, i) => { if (c !== '.') R(x + i * z, y + j * z, z, z, c === 'o' ? INK : '#ffffff'); }));
+  }
   function bellBtn(b) {
     const pop = 1 + 0.08 * Math.sin(T * 6);
     button(b, '#3fb43a', '#2f8a2c');
@@ -334,9 +338,12 @@
       Y.tabs.forEach(tabBtn);
       Y.tops.forEach(topBtn);
       if (built() && !st.serveOut) bellBtn(Y.serve);
-      if (!built() && st.mode === 'swirl' && st.hold == null && Math.floor(T * 1.5) % 2) {   // a hint: press to pour
-        const x = st.cx + 18, y = Y.yb - 30;
-        R(x, y, 8, 10, '#ffffff'); R(x + 2, y - 6, 3, 7, '#ffffff'); R(x, y, 8, 1, INK); R(x + 2, y - 6, 3, 1, INK);
+      if (!built() && !st.serveOut && st.slideIn === 0 && st.hold == null) {   // a hint: a little hand pressing (or pointing at the tubs)
+        const z = Math.max(2, Y.k), press = Math.floor(T * 2) % 2;
+        const x = st.mode === 'swirl' ? Math.round(Math.min(W - L.safeR - 9 * z, st.cx + 10 * Y.k)) : Math.round(Y.tubs[0].x + Y.tubs[0].w / 2 - 3 * z);
+        const y = st.mode === 'swirl' ? Math.round(Y.yb - 34 * Y.k) : Math.round(Y.tubs[0].y + Y.tubs[0].h + 2);
+        hand(x, y + press * z * 2, z);
+        if (press && st.mode === 'swirl') { R(x - 2 * z, y - z, z, z, '#ffffff'); R(x + 8 * z, y - z, z, z, '#ffffff'); }
       }
     },
     tap(x, y, id) {
