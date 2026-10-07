@@ -96,44 +96,44 @@
   // o: { pose: stand|point|tilt|chew, run, step, hop, bark, wag, wet }
   function vizsla(x, yb, dir = 1, s = 1, o = {}) {
     const pose = o.pose || 'stand', gp = gait(o), wag = o.wag ? Math.floor(T * 8) % 2 : 0, bark = o.bark ? 1 : 0;
-    const key = `vz:${pose}:${gp.f}:${gp.amp}:${wag}:${bark}`;
-    stamp(key, 66, 46, VZ_PAL, '#4a1e0a', c => {
+    const key = `vz3:${pose}:${gp.f}:${gp.amp}:${wag}:${bark}`;
+    // proportions from the photo: about as long as he is tall, long legs, short back, deep chest
+    stamp(key, 66, 52, VZ_PAL, '#4a1e0a', c => {
       const { V1, V2, V3, V4, EAR } = VZ;
-      // far legs, in shadow
-      const fl = legPts(true, 9.5, -14.5, gp, 0.5, 2.2), hl = legPts(false, -12, -15.5, gp, 0, 2.2);
-      drawLeg(c, fl, 3.2, 2.1, V3, V4); drawLeg(c, hl, 3.6, 2.1, V3, V4);
+      const fl = legPts(true, 9.2, -17, gp, 0.5, 2.3), hl = legPts(false, -10.6, -19, gp, 0, 2.3);
+      drawLeg(c, fl, 3.4, 2.3, V3, V4); drawLeg(c, hl, 3.8, 2.3, V3, V4);
       // tail, carried level
       const tw = pose === 'point' ? 0 : wag ? -1.6 : 0.6;
-      line(c, [[-16.5, -20.8], [-21.5, -22 + tw * 0.5]], 2.4, V1); line(c, [[-21.5, -22 + tw * 0.5], [-26.5, -22.8 + tw]], 1.4, V1);
-      // body: deep chest, tucked waist
-      curve(c, [['M', -17, -21.2], ['Q', -5, -24.8, 8, -24], ['Q', 15.5, -23.4, 15.2, -16.5], ['Q', 14.6, -10.6, 8, -10.4], ['Q', 0, -10.8, -6.2, -14.6], ['Q', -13, -13.2, -17.2, -16.8], ['Q', -18.6, -19.2, -17, -21.2]], V1);
-      curve(c, [['M', 15.2, -15], ['Q', 14.4, -10.6, 8, -10.4], ['Q', 0, -10.8, -6.2, -14.6], ['Q', -1, -12.6, 7, -12.4], ['Q', 12.4, -12.8, 15.2, -15]], V3);
-      curve(c, [['M', -14, -21.6], ['Q', -4, -24.2, 8, -23.4]], V2, false, 1.1);
-      curve(c, [['M', 8.5, -21], ['Q', 10.5, -17.5, 9, -14]], V3, false, 0.7);
-      E(c, -11.6, -16.6, 5.2, 5.6, V1, 0.35);   // haunch
-      curve(c, [['M', -15.6, -14], ['Q', -12, -11, -8.2, -13.4]], V3, false, 0.8);
-      // near legs
-      const nf = pose === 'point' ? [[10.5, -14.5], [14, -10.8], [12.8, -7.4], [12.4, -6.4], [14, -6.2]] : legPts(true, 10.5, -14.5, gp, 0, 2.2);
-      const nh = legPts(false, -11, -15.5, gp, 0.5, 2.2);
-      drawLeg(c, nh, 3.8, 2.2, V1, V3); drawLeg(c, nf, 3.4, 2.2, V1, V3);
-      // neck: thick where it meets the shoulders, sloping forward to the head (or bending down to chew)
+      line(c, [[-13.6, -24.2], [-18.6, -25.4 + tw * 0.5]], 2.5, V1); line(c, [[-18.6, -25.4 + tw * 0.5], [-23.4, -26.2 + tw]], 1.5, V1);
+      // torso: deep chest, tucked waist, short back
+      curve(c, [['M', -14, -24.6], ['Q', -2, -27.2, 8, -26.6], ['Q', 14.6, -25.6, 14.8, -19], ['Q', 14.2, -12.2, 8, -11.8], ['Q', 1, -12.2, -3.2, -16.2], ['Q', -10, -15.6, -14.6, -18.8], ['Q', -16, -22.2, -14, -24.6]], V1);
+      curve(c, [['M', 14.8, -17], ['Q', 14, -12.2, 8, -11.8], ['Q', 1, -12.2, -3.2, -16.2], ['Q', 1.4, -14, 7.4, -13.8], ['Q', 12.6, -14, 14.8, -17]], V3);
+      curve(c, [['M', -11.6, -25.2], ['Q', -2, -26.8, 8, -26]], V2, false, 1.1);
+      curve(c, [['M', 8.8, -23.4], ['Q', 10.8, -19.6, 9.4, -15.4]], V3, false, 0.7);
+      E(c, -9.8, -18.8, 5.2, 5.8, V1, 0.35);   // haunch
+      curve(c, [['M', -14, -15.8], ['Q', -10.4, -12.8, -6.6, -15.2]], V3, false, 0.8);
+      const nf = pose === 'point' ? [[10, -17], [13.6, -13], [12.4, -9.4], [12, -8.4], [13.6, -8.2]] : legPts(true, 10, -17, gp, 0, 2.3);
+      const nh = legPts(false, -9.6, -19, gp, 0.5, 2.3);
+      drawLeg(c, nh, 4, 2.4, V1, V3); drawLeg(c, nf, 3.6, 2.4, V1, V3);
+      // neck: thick at the shoulders, sloping forward (or bending down to chew), collar wrapped around
       const chew = pose === 'chew';
       const neck = chew
-        ? [['M', 1, -23.8], ['Q', 9, -26.4, 15, -22.6], ['L', 19.6, -17.4], ['L', 16.4, -12.4], ['Q', 13.6, -11.6, 9, -11.6], ['Z']]
-        : [['M', 1, -23.8], ['Q', 7, -31, 12, -33.6], ['L', 18.6, -30], ['Q', 18, -24, 15.4, -15], ['Z']];
+        ? [['M', 2, -26.6], ['Q', 10, -28.6, 15.6, -24], ['L', 20, -18.4], ['L', 16.6, -13.4], ['Q', 14, -12.6, 9, -12.4], ['Z']]
+        : [['M', 2, -26.6], ['Q', 7.6, -33.6, 12.6, -36.4], ['L', 19, -32.8], ['Q', 18.2, -26, 14.6, -18.6], ['Z']];
       curve(c, neck, V1);
-      if (!chew) { curve(c, [['M', 17.8, -27], ['Q', 17.2, -21, 15.4, -16]], V3, false, 0.9); curve(c, [['M', 3, -24.2], ['Q', 7.4, -30, 11.6, -32.6]], V2, false, 0.8); }
-      c.save(); curve(c, neck, V1); c.clip();   // the collar wraps around the neck
-      if (chew) poly(c, [[11.4, -27], [13.4, -27], [13.4, -10], [11.4, -10]], VZ.COL);
-      else poly(c, [[7.4, -32.4], [19.4, -27.2], [18.8, -25.4], [6.8, -30.6]], VZ.COL);
+      if (!chew) { curve(c, [['M', 18.2, -29.6], ['Q', 17.4, -23.6, 14.8, -19.4]], V3, false, 0.9); curve(c, [['M', 4, -27], ['Q', 8.2, -32.8, 12.2, -35.4]], V2, false, 0.8); }
+      c.save(); curve(c, neck, V1); c.clip();
+      if (chew) poly(c, [[11.8, -30], [13.8, -30], [13.8, -10], [11.8, -10]], VZ.COL);
+      else poly(c, [[8, -35.2], [20, -30], [19.4, -28.2], [7.4, -33.4]], VZ.COL);
       c.restore();
-      if (chew) E(c, 12.4, -11.6, 0.85, 0.85, VZ.RING); else E(c, 17.6, -25, 0.85, 0.85, VZ.RING);
-      // head (tilts, or drops down to chew)
+      if (chew) E(c, 12.8, -12.6, 0.9, 0.9, VZ.RING); else E(c, 18, -27.8, 0.9, 0.9, VZ.RING);
+      // head: a good size, long muzzle, big soft ear
       c.save();
-      if (chew) { c.translate(17.6, -18.4); c.rotate(0.75); }
-      else { c.translate(15.6, -32.6); if (pose === 'tilt') c.rotate(-0.28); }
+      if (chew) { c.translate(18, -19.6); c.rotate(0.75); }
+      else { c.translate(16.2, -35.6); if (pose === 'tilt') c.rotate(-0.28); }
+      c.scale(1.12, 1.12);
       E(c, 1.4, -1.4, 5, 4.3, V1);
-      curve(c, [['M', 3, -3.9], ['L', 9.6, -3.3], ['Q', 12.2, -2.9, 12.1, -0.8], ['L', 11.6, 0.7], ['Q', 8, 1.7, 3, 1.5], ['Z']], V1);
+      curve(c, [['M', 3, -3.9], ['L', 9.6, -3.3], ['Q', 12.2, -2.9, 12.1, -0.8], ['L', 11.6, 0.7], ['Q', 8, 1.8, 3, 1.6], ['Z']], V1);
       curve(c, [['M', 3.2, -3.7], ['L', 10, -3.1]], V2, false, 0.9);
       E(c, 0.6, -4.2, 3, 1, V2);
       if (bark) { poly(c, [[5, 1], [11.6, 0.4], [10.4, 3.2], [5.2, 2.4]], VZ.MTH); E(c, 8.4, 2.4, 1.4, 0.8, VZ.TNG); curve(c, [['M', 4.8, 2.2], ['L', 10.4, 3.4], ['Q', 8, 4.6, 5, 3.6], ['Z']], V1); }
@@ -141,64 +141,66 @@
       if (!bark) curve(c, [['M', 11.4, 0.6], ['L', 5.6, 1.1]], V4, false, 0.6);
       E(c, 5.3, -2.5, 1.05, 0.95, VZ.EYE); E(c, 5.6, -2.5, 0.55, 0.62, VZ.INK); E(c, 5.3, -2.9, 0.25, 0.25, VZ.W);
       curve(c, [['M', 4, -3.9], ['L', 6.6, -3.6]], V3, false, 0.6);
-      // the big soft ear
       if (pose === 'tilt') curve(c, [['M', -1.6, -4.6], ['Q', 2, -6.2, 3.4, -3], ['Q', 4.4, 1, 1.6, 3.4], ['Q', -1.6, 2.6, -2.6, -0.8], ['Z']], EAR);
-      else curve(c, [['M', -1.6, -4.6], ['Q', 3, -4.9, 2.7, 0.4], ['Q', 2.3, 5.6, -0.4, 6.5], ['Q', -2.9, 4.1, -2.7, -0.5], ['Z']], EAR);
-      curve(c, [['M', 0.4, -3.4], ['Q', 1.2, 1, 0, 4.6]], V3, false, 0.6);
+      else curve(c, [['M', -1.8, -4.6], ['Q', 3.2, -5, 2.9, 0.6], ['Q', 2.5, 6.6, -0.4, 7.6], ['Q', -3.1, 4.6, -2.9, -0.5], ['Z']], EAR);
+      curve(c, [['M', 0.4, -3.4], ['Q', 1.2, 1.4, 0, 5.4]], V3, false, 0.6);
       c.restore();
     }, x, yb - (o.hop || 0), dir);
     if (o.wet) for (let i = 0; i < 4; i++) R(Math.round(x - 16 + i * 9), Math.round(yb - 8 + ((T * 30 + i * 7) % 10)), 1, 2, '#8ec8f0');
   }
 
-  /* the white husky: thick fluffy coat, curled plume tail, pointy ears, blue eyes */
+  /* the white husky: big fluffy ruff, fox-like face, pointy ears, blue eyes, plume tail curled up high */
   const HK = { H1: '#f6f6f2', H2: '#ffffff', H3: '#d8dce6', H4: '#b4bcca', PINK: '#f2a8a0', NOSE: '#2a2a30', EYE: '#6aaee8', INK: '#22222a', TNG: '#e8708a', LIP: '#5a5a66' };
   const HK_PAL = Object.values(HK);
   // o: { pose: stand|howl|chew, run, step, hop, pant, wag, bark }
   function husky(x, yb, dir = 1, s = 1, o = {}) {
     const pose = o.pose || 'stand', gp = gait(o), wag = o.wag ? Math.floor(T * 7) % 2 : 0, pant = o.pant ? 1 : 0, bark = o.bark ? 1 : 0;
-    const key = `hk:${pose}:${gp.f}:${gp.amp}:${wag}:${pant}:${bark}`;
-    stamp(key, 60, 50, HK_PAL, '#7e8698', c => {
+    const key = `hk3:${pose}:${gp.f}:${gp.amp}:${wag}:${pant}:${bark}`;
+    stamp(key, 62, 60, HK_PAL, '#7e8698', c => {
       const { H1, H2, H3, H4 } = HK;
-      const fl = legPts(true, 9, -13, gp, 0.5, 3), hl = legPts(false, -11.5, -14, gp, 0, 3);
-      drawLeg(c, fl, 4.4, 3.3, H3, H4); drawLeg(c, hl, 4.8, 3.3, H3, H4);
-      // the curled plume of a tail, lying over the back
+      const fl = legPts(true, 8.4, -17, gp, 0.5, 3.2), hl = legPts(false, -9.6, -18.6, gp, 0, 3.2);
+      drawLeg(c, fl, 4.4, 3.4, H3, H4); drawLeg(c, hl, 4.8, 3.4, H3, H4);
+      // the plume tail, curled up over the back
       const tw = wag ? 1 : 0;
-      const plume = [[-15.5, -21.5, 3.6], [-18, -26.5, 4.2], [-15.4, -30.6 - tw, 4.2], [-10.6, -31 - tw, 3.6], [-7.4, -28.4 - tw, 2.6]];
-      for (const [px, py, r] of plume) E(c, px + 0.8, py + 0.9, r, r, H3);
+      const plume = [[-12.4, -27, 3.2], [-15, -31, 3.5], [-13.6, -35 - tw, 3.4], [-9.8, -36 - tw, 3], [-6.8, -34.2 - tw, 2.3]];
+      for (const [px, py, r] of plume) E(c, px + 0.7, py + 0.8, r, r, H3);
       for (const [px, py, r] of plume) E(c, px, py, r, r, H1);
-      E(c, -15.6, -31.4 - tw, 2, 1.4, H2);
-      // body, belly fringe, haunch and chest ruff
-      E(c, -1, -19.4, 16.2, 8.6, H1);
-      for (let i = 0; i < 9; i++) E(c, -12 + i * 2.6, -11.4 + (i % 2) * 0.4, 1.7, 1.5, i % 2 ? H3 : H1);
-      E(c, -2, -25.2, 10, 1.8, H2);
-      E(c, -10.8, -15.8, 6.2, 6.6, H1); curve(c, [['M', -16, -12.6], ['Q', -11, -9, -6, -12]], H3, false, 0.9);
-      E(c, 10.6, -18.4, 6.6, 7.6, H1); E(c, 11.2, -14.4, 3.4, 2.6, H3);
-      // near legs: thick and fluffy
-      const nf = legPts(true, 10, -13, gp, 0, 3), nh = legPts(false, -10.5, -14, gp, 0.5, 3);
-      drawLeg(c, nh, 5, 3.4, H1, H3); drawLeg(c, nf, 4.6, 3.4, H1, H3);
-      // the mane
-      E(c, 11.4, -25, 6.4, 7.6, H1, -0.3);
-      for (let i = 0; i < 4; i++) E(c, 6.6 + i * 2.2, -19.6 + (i % 2), 1.6, 1.4, H1);
-      // head
+      curve(c, [['M', -11.6, -28.6], ['Q', -13.6, -32.6, -10.6, -33.6], ['Q', -8.6, -33.8, -7.4, -32.6]], H3, false, 0.9);   // the curl
+      // body: deep chest, a little tuck, fluffy fringe underneath
+      curve(c, [['M', -13, -26.4], ['Q', -2, -30, 8, -29], ['Q', 14, -27.6, 14.4, -21], ['Q', 13.8, -15, 7.4, -14.4], ['Q', 0, -14.6, -4, -17], ['Q', -11, -16.6, -14.4, -20.6], ['Q', -15.2, -24.6, -13, -26.4]], H1);
+      for (let i = 0; i < 7; i++) E(c, -6 + i * 2.4, -14.8 + (i % 2) * 0.4, 1.7, 1.5, i % 2 ? H3 : H1);
+      curve(c, [['M', -10.6, -27.6], ['Q', -2, -29.8, 6, -29]], H3, false, 0.7);   // back line
+      E(c, -1.6, -27.4, 7, 1.4, H2);
+      E(c, -9.4, -20.4, 5.8, 6.6, H1); curve(c, [['M', -14, -16.4], ['Q', -9.6, -13.2, -5, -15.8]], H3, false, 0.9);
+      // near legs: sturdy, with fluffy "pants"
+      const nf = legPts(true, 9.4, -17, gp, 0, 3.2), nh = legPts(false, -8.6, -18.6, gp, 0.5, 3.2);
+      drawLeg(c, nh, 5, 3.6, H1, H3); drawLeg(c, nf, 4.6, 3.6, H1, H3);
+      E(c, -11.6, -13.4, 2.4, 3, H1);
+      // chest ruff and mane
+      E(c, 10, -23, 6.2, 7.4, H1); E(c, 11, -17.4, 3.6, 2.8, H1); E(c, 11.4, -16.2, 2.4, 1.4, H3);
+      E(c, 11.6, -30, 6.4, 7.6, H1, -0.35);
+      for (let i = 0; i < 4; i++) E(c, 6.2 + i * 2.2, -22.4 + (i % 2), 1.5, 1.3, H1);
+      // head: a fox-like wedge with a smile
       c.save();
-      if (pose === 'chew') { c.translate(16.5, -18.5); c.rotate(0.7); }
-      else if (pose === 'howl') { c.translate(14.4, -31); c.rotate(-0.95); }
-      else c.translate(15.2, -29.8);
-      const ear = (ex, sh) => { poly(c, [[ex - 2, -5.5], [ex + 0.6 + sh, -12.2], [ex + 3.2, -6]], H1); poly(c, [[ex - 0.6, -6.4], [ex + 0.7 + sh, -10.2], [ex + 2.1, -6.6]], HK.PINK); };
-      ear(0.4, -0.4); ear(4.2, 0.6);
-      E(c, 1.6, -2, 5.6, 5, H1);
-      E(c, 0.2, 1.6, 4.2, 3.2, H1);   // cheek fluff
-      curve(c, [['M', 4, -3.2], ['L', 10.6, -1.4], ['Q', 11.4, -0.4, 10.6, 0.9], ['L', 4, 1.8], ['Z']], H1);
-      curve(c, [['M', 4.6, 1.6], ['L', 10.4, 0.9]], H3, false, 0.9);
-      if (pose === 'howl') { E(c, 9, 1.4, 1.6, 1.2, HK.LIP); E(c, 5.5, -2.8, 1.1, 0.35, HK.INK); }
+      if (pose === 'chew') { c.translate(17.8, -21.4); c.rotate(0.7); }
+      else if (pose === 'howl') { c.translate(15.6, -37); c.rotate(-0.95); }
+      else c.translate(16.4, -35.6);
+      c.scale(1.12, 1.12);
+      const ear = (ex, sh) => { poly(c, [[ex - 2.2, -5.8], [ex + 0.8 + sh, -13.4], [ex + 3.4, -6.2]], H1); poly(c, [[ex - 0.7, -6.6], [ex + 0.9 + sh, -11.2], [ex + 2.2, -6.8]], HK.PINK); };
+      ear(0.2, -0.4); ear(4.6, 0.6);
+      E(c, 1.6, -2, 6.2, 5.4, H1);
+      E(c, 0.4, 1.8, 4.8, 3.6, H1);   // cheek fluff
+      curve(c, [['M', 4.4, -3.6], ['L', 11.4, -1.6], ['Q', 12.2, -0.6, 11.4, 0.9], ['L', 4.4, 2.2], ['Z']], H1);
+      curve(c, [['M', 5, 2], ['L', 11.2, 0.9]], H3, false, 0.9);
+      if (pose === 'howl') { E(c, 9.6, 1.4, 1.7, 1.3, HK.LIP); E(c, 6, -3, 1.2, 0.35, HK.INK); }
       else {
-        if (bark || pant) { poly(c, [[6, 1.2], [10.4, 0.9], [9.6, 3.2], [6.4, 2.8]], HK.LIP); E(c, 8, 3.2, 1.4, 1.9, HK.TNG); }
-        else curve(c, [['M', 10.2, 0.9], ['L', 6, 1.8]], HK.LIP, false, 0.6);
-        E(c, 5.6, -2.6, 1.25, 0.95, HK.EYE); E(c, 5.9, -2.6, 0.55, 0.62, HK.INK); E(c, 5.5, -2.95, 0.25, 0.25, H2);
-        curve(c, [['M', 4.2, -3.4], ['Q', 5.6, -4, 7, -3.4]], HK.LIP, false, 0.45);
+        if (bark || pant) { poly(c, [[6.4, 1.3], [11.2, 0.9], [10.4, 3.4], [6.8, 3]], HK.LIP); E(c, 8.6, 3.5, 1.5, 2, HK.TNG); }
+        else curve(c, [['M', 11, 0.9], ['Q', 8.6, 2.6, 6.2, 1.6]], HK.LIP, false, 0.6);
+        E(c, 6, -2.8, 1.35, 1, HK.EYE); E(c, 6.3, -2.8, 0.6, 0.66, HK.INK); E(c, 5.9, -3.15, 0.27, 0.27, H2);
+        curve(c, [['M', 4.5, -3.7], ['Q', 6, -4.4, 7.6, -3.7]], HK.LIP, false, 0.45);
       }
-      E(c, 10.7, -0.8, 1.35, 1.15, HK.NOSE);
-      E(c, 0.6, -4.6, 3.4, 1.1, H2);
+      E(c, 11.5, -0.9, 1.4, 1.2, HK.NOSE);
+      E(c, 0.6, -4.9, 3.6, 1.1, H2);
       c.restore();
     }, x, yb - (o.hop || 0), dir);
   }
@@ -592,12 +594,14 @@
     },
     { a: 16.2, b: 22.4, sky: 'day', // 6. hopping across the creek; the husky shakes water all over the Vizsla
       stones: [-34, -12, 10, 32],
-      hopX(t, t0) {   // hop from stone to stone between t0 and t0 + 2.4
-        const st0 = this.stones, k = seg(t, t0, t0 + 2.4) * (st0.length + 1), i = Math.floor(k), f = k - i;
-        const from = i === 0 ? -72 : st0[Math.min(i - 1, st0.length - 1)], to = i >= st0.length ? 72 : st0[i];
-        return [lerp(from, to, f), i <= st0.length ? Math.sin(f * Math.PI) * 10 : 0];
+      hopX(t, t0, end) {   // hop from stone to stone between t0 and t0 + 2.4, then onto the far bank (and stay there)
+        const st0 = this.stones, n = st0.length + 1, k = seg(t, t0, t0 + 2.4) * n;
+        if (k >= n) return [end, 0];
+        const i = Math.floor(k), f = k - i;
+        const from = i === 0 ? -72 : st0[i - 1], to = i >= st0.length ? end : st0[i];
+        return [lerp(from, to, f), Math.sin(f * Math.PI) * 10];
       },
-      cam() { setCam(0, -14, 150, 92); },
+      cam(t) { setCam(lerp(0, 70, eout(seg(t, 18.4, 20))), -14, 150, 92); },
       world(t) {
         const v = vis();
         cloudRow(0.6, -70); hills(-40, 14, 0.02, 5, '#8ab89a', 0.5); pineRow(-30, 16, 22, 34, '#2f6a3a', '#3f7a44', 0.3, 5);
@@ -607,7 +611,7 @@
         R(-52, -3, 3, 4, '#a88a5a'); R(49, -3, 3, 4, '#a88a5a');
         for (let i = 0; i < 26; i++) { const yy = 1 + (i * 7) % 40, hw = 48 + yy * 0.12, x = -hw + ((i * 37 + T * 30) % (hw * 2 - 6)); R(x, yy, 6, 1, '#9ad0f0'); }
         for (const sx0 of this.stones) { ellipse(sx0, 9, 8, 3, '#8a8a92'); ellipse(sx0 - 1, 8, 6, 2, '#aaaab2'); }
-        const [hx, hh] = this.hopX(t, 16.4), [vx, vh] = this.hopX(t, 17.3);
+        const [hx, hh] = this.hopX(t, 16.4, 94), [vx, vh] = this.hopX(t, 17.3, 55);
         owlFly((hx + vx) / 2 + 12, -50);
         const shaking = t > 20.2 && t < 21.4, jit = shaking ? (Math.floor(T * 30) % 2 ? 1 : -1) : 0;
         vizsla(vx, 6 - vh, 1, 1, { pose: t > 20.4 ? 'tilt' : 'stand', wet: t > 20.4, step: vh > 0 ? 1 : 0 });
@@ -617,10 +621,10 @@
       },
       upd(t) {
         for (const ti of [17.9, 18.8]) if (t >= ti && t - 1 / 30 < ti) spawn(10, () => ({ x: sx(ti < 18 ? 24 : 42), y: sy(18), vx: rand(-50, 50), vy: rand(-90, -30), g: 220, life: 0.6, max: 0.6, s: Math.max(1, cam.z), c: Math.random() < 0.5 ? '#bfe6ff' : '#ffffff' }));
-        if (t > 20.2 && t < 21.4) { const [hx] = this.hopX(t, 16.4); spawn(3, () => ({ x: sx(hx + rand(-12, 12)), y: sy(-14 + rand(-6, 6)), vx: rand(-90, 90), vy: rand(-80, -20), g: 200, life: 0.6, max: 0.6, s: Math.max(1, cam.z), c: Math.random() < 0.5 ? '#8ec8f0' : '#ffffff' })); }
+        if (t > 20.2 && t < 21.4) { const [hx] = this.hopX(t, 16.4, 94); spawn(3, () => ({ x: sx(hx + rand(-12, 12)), y: sy(-14 + rand(-6, 6)), vx: rand(-90, 90), vy: rand(-80, -20), g: 200, life: 0.6, max: 0.6, s: Math.max(1, cam.z), c: Math.random() < 0.5 ? '#8ec8f0' : '#ffffff' })); }
         for (const t0 of [16.4, 17.3]) for (let i = 0; i < 4; i++) { const ti = t0 + 2.4 * (i + 1) / 5; if (t >= ti && t - 1 / 60 < ti) spawn(6, () => ({ x: sx(this.stones[i]), y: sy(6), vx: rand(-40, 40), vy: rand(-60, -20), g: 200, life: 0.5, max: 0.5, s: Math.max(1, cam.z), c: '#bfe6ff' })); }
       },
-      words: [[19.2, 'SPLASH!', () => [0, -22]], [20.5, 'RUFF!', () => [40, -36]]],
+      words: [[19.2, 'SPLASH!', () => [20, -22]], [20.5, 'RUFF!', () => [62, -40]]],
     },
     { a: 22.4, b: 25.4, sky: 'woods', // 7. the berry bush rustles and up stands a bear: ROAR!
       cam() { setCam(0, -40, 84, 80); },
