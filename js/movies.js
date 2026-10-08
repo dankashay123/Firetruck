@@ -91,7 +91,9 @@
     R(x + 2, y, c.w - 4, c.h, '#ffffff'); R(x, y + 2, c.w, c.h - 4, '#ffffff');
     R(x + 4, y + 4, c.w - 8, c.h - 16, mix(c.e.sky || '#8fd6ff', '#141a45', nightK() * 0.6));
     R(x + 4, y + c.h - 18, c.w - 8, 6, '#4b4f5c'); R(x + 4, y + c.h - 12, c.w - 8, 8, c.e.bg);
+    g.save(); g.beginPath(); g.rect(x + 2, y + 2, c.w - 4, c.h - 4); g.clip();   // keep big covers inside their card
     drawVBig(c.e.i, x + c.w / 2, y + c.h - 16, st.scale, true, c.e.cover && ((x0, yb) => SCENES[c.e.scene].cover(x0 + 10, yb)));
+    g.restore();
     // play badge
     const bx = x + c.w - 13, byy = y + 12;
     circle(bx, byy, 8, '#ffd21f'); circle(bx, byy, 6, '#e8222b');
