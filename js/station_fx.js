@@ -34,10 +34,14 @@ const FX = (() => {
   }
 
   /* ---------- the alarm and the drill ---------- */
+  // Police car first, then the fire truck, then the ambulance: each one leaves only when the one
+  // before it has driven off the screen. They wait out of sight for 3 seconds, then come home one
+  // at a time in the same order, each setting off once the one before it has parked.
+  const ORDER = [VI.police, VI.fire, VI.amb];
   function startDrill() {
     if (st.drill || !api || api.bed() || api.pending()) return;
     st.ring = 2.8; bellRing(2.8);
-    st.drill = { t: 0, sent: [false, false, false], done: false };
+    st.drill = { t: 0, phase: 'out', i: 0, wait: 1.0, sent: [], done: false, doneT: 0 };
     word('RING RING!', P.bx - 26, P.by - 22, '#ffd21f');
     api.rush();
     st.zoom = 7;
@@ -45,15 +49,31 @@ const FX = (() => {
   function updateDrill(dt) {
     const d = st.drill; if (!d) return;
     d.t += dt;
-    [1.0, 1.6, 2.2].forEach((at, i) => { if (!d.sent[i] && d.t >= at) { d.sent[i] = true; api.trip(i); } });
     if (st.zoom > 0 && Math.random() < dt * 1.5) SND.play(Math.random() < 0.5 ? 'bark' : 'bark2');
-    if (d.t > 6 && api.allHome() && !d.done) {
+    if (d.phase === 'out') {
+      if ((d.wait -= dt) <= 0) {
+        const vi = ORDER[d.i];
+        if (d.i >= ORDER.length) { d.phase = 'away'; d.wait = 3; }
+        else if (!d.sent.includes(vi)) { if (api.trip(vi)) d.sent.push(vi); else { d.i++; d.wait = 0; } }   // already out? skip it
+        else if (api.held(vi)) { d.i++; d.wait = 0.2; }
+      }
+    } else if (d.phase === 'away') {
+      if ((d.wait -= dt) <= 0) { d.phase = 'home'; d.i = 0; d.wait = 0; }
+    } else if (d.phase === 'home') {
+      const list = ORDER.filter(vi => d.sent.includes(vi));
+      if (d.i >= list.length) d.phase = 'end';
+      else {
+        const vi = list[d.i];
+        if (api.held(vi)) { if ((d.wait -= dt) <= 0) api.release(vi); }
+        else if (api.parked(vi)) { d.i++; d.wait = 0.4; }
+      }
+    } else if (d.phase === 'end' && !d.done) {
       d.done = true; st.cheer = 2;
       confetti(50); [523, 659, 784, 1047].forEach((f, i) => tone('triangle', f, i * 0.12, i === 3 ? 0.5 : 0.14, 0.06));
       word('HOORAY!', P.zx - 24, P.B.signTop - 4, '#ffd21f');
     }
-    if (d.done && d.t > 9) st.drill = null;
-    if (d.t > 60) st.drill = null;   // never get stuck
+    if (d.done && (d.doneT += dt) > 3) st.drill = null;
+    if (d.t > 90) { for (const vi of ORDER) api.release(vi); st.drill = null; }   // never get stuck
   }
   function drawBell() {
     const shake = st.ring > 0 ? (Math.floor(T * 30) % 2 ? 1 : -1) : 0, x = P.bx + shake, y = P.by, r = P.br;

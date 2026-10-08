@@ -198,6 +198,7 @@
         v.speed = Math.min(150, v.speed + 260 * dt);
         v.x += v.speed * dt;
         if (!v.lap && v.x > W + 8) {
+          if (v.hold) { v.state = 'hold'; v.x = W + 200; if (v.stopSiren) v.stopSiren(); v.stopSiren = null; continue; }
           if (v.mission) { const m = v.mission; v.mission = null; v.state = 'away'; v.x = W + 200; goScene(m, { v: V.indexOf(v) }); continue; }
           v.x = -v.len - 8; v.lap = true; say('back-to-the-station', true);
         }
@@ -269,7 +270,11 @@
   // hooks for the alarm-bell fire drill and the storms (js/station_fx.js)
   const fxHooks = {
     rush() { for (const p of crew) goPole(p, true); },
-    trip(i) { const v = V[i]; if (v.state === 'parked' && !v.mission) startTrip(v); },
+    // the drill sends a vehicle out and keeps it waiting just off screen until it's called back
+    trip(i) { const v = V[i]; if (v.state !== 'parked' || v.mission) return false; v.hold = true; startTrip(v); return true; },
+    held: i => V[i].state === 'hold',
+    parked: i => V[i].state === 'parked',
+    release(i) { const v = V[i]; v.hold = false; if (v.state !== 'hold') return; Object.assign(v, { state: 'drive', lap: true, x: -v.len - 8, y: L.laneY, speed: 90 }); SFX.honk(); },
     allHome: () => V.every(v => v.state === 'parked'),
     jump() { for (const p of crew) if (p.state !== 'gone' && p.state !== 'sleep') p.hop = 0.5; dog.jump = 0.6; },
     bed: () => bed.on,
