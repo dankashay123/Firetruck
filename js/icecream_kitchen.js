@@ -29,7 +29,9 @@
   const scoopY = i => boxTop().y - 4 - i * 11;   // center of scoop i (the first one sits down in the rim)
   function swirlBase() {   // where the soft serve starts, and how wide
     const t = boxTop();
-    return B.scoops.length ? { y: scoopY(B.scoops.length - 1) - 4, w: 18 } : { y: t.y + 3, w: t.w + 6 };   // overhangs the rim a little
+    if (B.scoops.length) return { y: scoopY(B.scoops.length - 1) - 4, w: 18 };
+    // otherwise it starts just behind the front of the rim, exactly as wide as the rim, so it sits inside
+    return B.box === 'cup' ? { y: -14, w: 22 } : B.box === 'waffle' ? { y: -21, w: 22 } : { y: -20, w: 18 };
   }
   const swirlH = () => Math.min(B.amount, 1) * SWIRL_H;
   const RING = 7, RINGS = [1, 0.8, 0.58, 0.36, 0.2];
