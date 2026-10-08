@@ -18,9 +18,8 @@
 
   // camera: world -> screen is (x * z + ox, y * z + oy)
   const cam = { x: 0, y: 0, z: 1, ox: 0, oy: 0, cap: -100 };
-  const st = { t: 0, shot: -1, lt: 0, cue: 0, fired: {}, done: false, stopSiren: null, tune: 0, saved: null, hearts: [], cars: [], puffT: 0, beepT: 0 };
+  const st = { t: 0, shot: -1, lt: 0, cue: 0, fired: {}, done: false, saved: null, hearts: [], cars: [], puffT: 0, beepT: 0, paused: false, ui: 0, drag: null, ff: false };
   const P = {};   // layout numbers
-  let rumble = null;
   const sx = x => cam.ox + x * cam.z, sy = y => cam.oy + y * cam.z;
   const portrait = () => H > W * 1.2;
 
@@ -35,7 +34,9 @@
     }
     return narrBuf[n] || Promise.resolve(null);
   }
+  let lastLine = null, resumeLine = null;
   function narr(n, fallback) {
+    lastLine = n;
     const run = st.run;
     loadNarr(n).then(buf => {
       if (run !== st.run || scene !== 'movieAmb') return;
@@ -51,73 +52,136 @@
       src.onended = () => { const i = narrSrcs.indexOf(src); if (i >= 0) narrSrcs.splice(i, 1); };
     });
   }
+  function stopNarr() { for (const s of narrSrcs.splice(0)) { try { s.stop(); } catch (e) {} } narrEnd = 0; }
 
-  /* ---------- background tune: a little loop, scheduled note by note ---------- */
-  const EIGHTH = 0.22;
-  const TUNE = (() => {
-    const mel = [[72, 1], [76, 1], [79, 2], [76, 1], [79, 1], [84, 2], [81, 1], [79, 1], [77, 1], [76, 1], [74, 4],
-                 [71, 1], [74, 1], [77, 2], [74, 1], [77, 1], [81, 2], [79, 1], [77, 1], [76, 1], [74, 1], [72, 4]];
-    const ev = [];
-    let at = 0;
-    for (const [m, n] of mel) { ev.push({ at, m, d: n * EIGHTH * 0.9, type: 'triangle', v: 0.05 }); at += n; }
-    [48, 43, 43, 48].forEach((root, bar) => { for (let q = 0; q < 4; q++) ev.push({ at: bar * 8 + q * 2, m: root + (q % 2 ? 7 : 0), d: EIGHTH * 1.6, type: 'sine', v: 0.06 }); });
-    ev.sort((a, b) => a.at - b.at);
-    return { ev, len: 32 };
-  })();
-  const TUNE_START = 0.2;
-  function tuneTick() {
-    for (let guard = 0; guard < 8; guard++) {
-      const k = st.tune, loop = Math.floor(k / TUNE.ev.length), e = TUNE.ev[k % TUNE.ev.length];
-      const when = TUNE_START + (loop * TUNE.len + e.at) * EIGHTH;
-      if (when > st.t + 0.12 || when > END - 0.3) return;
-      st.tune++;
-      if (when < st.t - 0.05) continue;
-      const quiet = st.stopSiren ? 0.45 : 1;
-      tone(e.type, 440 * 2 ** ((e.m - 69) / 12), Math.max(0, when - st.t), e.d, e.v * quiet);
+  /* ---------- sound track: recorded CC0 clips (the synth plays if a clip is missing) ---------- */
+  // (toys.js loads after this file, so the bank is made on first use)
+  const SND_FILES = {
+    slide: ['rescue-slide', 0.22], thud: ['rescue-thud', 0.4], door: ['rescue-door', 0.3], whoosh: ['mc-swish', 0.3],
+    brake: ['trash-air', 0.24], chime: ['mv-chime', 0.5], beep: ['bt-beep', 0.3], applause: ['rescue-applause', 0.4], twinkle: ['mc-twinkle', 0.4],
+    click: ['rescue-click', 0.35], start: ['rescue-start', 0.24],
+  }, SND_SYNTH = {
+    slide() {}, thud() { noise(0, 0.15, 0.18, 300, 1); tone('sine', 200, 0, 0.2, 0.14, 120); }, door() { SFX.door(); }, whoosh() { SFX.whoosh(); },
+    brake() { SFX.brake(); }, chime() { SFX.chime(); }, beep() { SFX.beep(); }, applause() { SFX.fanfare(); }, twinkle() { SFX.sunrise(); },
+    click() { tone('square', 200, 0, 0.05, 0.06); tone('square', 300, 0.07, 0.05, 0.05); },
+  };
+  let bank = null;
+  const live = new Set();   // clips still sounding, so a pause or the home button can cut them off
+  const SND = {
+    bank: () => bank || (bank = TOY.bank(SND_FILES, SND_SYNTH)),
+    load() { SND.bank().load(); },
+    play(k, rate, vol) {
+      const src = SND.bank().play(k, rate, vol);
+      if (src) { live.add(src); src.onended = () => live.delete(src); }
+      return src;
+    },
+    stop() { for (const s of live) { try { s.stop(); } catch (e) {} } live.clear(); },
+  };
+  function getBuf(n) {
+    return fetch('audio/' + n + '.mp3').then(r => r.ok ? r.arrayBuffer() : null)
+      .then(ab => ab && new Promise(res => { try { ac.decodeAudioData(ab, res, () => res(null)); } catch (e) { res(null); } })).catch(() => null);
+  }
+  // A looping bed (siren, engine) whose level follows the episode clock: set(level) every frame.
+  // synth(level, state) -> state is the stand-in while the recording is missing.
+  function bed(name, vol, synth) {
+    let buf = null, asked = false, src = null, gn = null, fb = null;
+    const B = {
+      load() { if (!asked && ac) { asked = true; getBuf(name).then(b => { buf = b; }); } },
+      set(level) {
+        if (!ac) return;
+        if (level <= 0.001) { B.stop(); return; }
+        if (buf) {
+          if (!src) {
+            src = ac.createBufferSource(); gn = ac.createGain();
+            src.buffer = buf; src.loop = true; gn.gain.value = 0;
+            src.connect(gn); gn.connect(master); src.start();
+          }
+          gn.gain.setTargetAtTime(level * vol, ac.currentTime, 0.06);
+        } else if (synth) fb = synth(level, fb);
+      },
+      stop() {
+        if (src) { const n = ac.currentTime; gn.gain.cancelScheduledValues(n); gn.gain.setTargetAtTime(0, n, 0.05); try { src.stop(n + 0.3); } catch (e) {} src = null; gn = null; }
+        if (fb) fb = synth(0, fb);
+      },
+    };
+    return B;
+  }
+  const SIREN = bed('rescue-siren-amb', 0.2, (lv, s) => lv > 0 ? s || siren('amb') : (s && s(), null));
+  const ENGINE = bed('rescue-engine', 0.14, (lv, s) => { s = s || noiseLoop(110, 0.7); s(lv * 0.12); return s; });
+  const sirenAt = t => t >= 9.6 && t < 18.0;
+  const rumble = lv => { st.rumbled = true; if (!st.ff) ENGINE.set(lv / 0.12); };   // the shots ask for 0 .. 0.12; a shot that doesn't ask is quiet
+
+  // music: a warm, caring loop in step with the clock (pause and the timeline included)
+  const MUSIC = { name: 'rescue-amb-music', vol: 0.16, from: 0.2, buf: null, src: null, gain: null, asked: false };
+  function loadSound() {
+    if (!ac) return;
+    SND.load(); SIREN.load(); ENGINE.load();
+    if (!MUSIC.asked) { MUSIC.asked = true; getBuf(MUSIC.name).then(b => { MUSIC.buf = b; }); }
+  }
+  function stopMusic() { if (MUSIC.src) { try { MUSIC.src.stop(); } catch (e) {} MUSIC.src = null; MUSIC.gain = null; } }
+  function musicTick() {
+    if (!MUSIC.buf || !ac) return;
+    const t = st.t;
+    if (!MUSIC.src && t >= MUSIC.from && t < END - 0.3) {
+      const src = ac.createBufferSource(), gn = ac.createGain();
+      src.buffer = MUSIC.buf; src.loop = true; gn.gain.value = 0;
+      const off = (t - MUSIC.from) % MUSIC.buf.duration;
+      src.connect(gn); gn.connect(master); src.start(0, off);
+      Object.assign(MUSIC, { src, gain: gn, at: ac.currentTime, off });
     }
+    if (!MUSIC.gain) return;
+    // a slow frame holds the picture back while the music runs on: start over in step if they drift apart
+    const dur = MUSIC.buf.duration, want = (t - MUSIC.from) % dur, have = (MUSIC.off + ac.currentTime - MUSIC.at) % dur;
+    if (Math.min(Math.abs(want - have), dur - Math.abs(want - have)) > 0.35) { stopMusic(); return; }
+    // softer under a narration line (the master dips too) and under the siren; fades in, and out at the end
+    const talk = ac.currentTime < Math.max(narrEnd, voiceUntil) ? 0.7 : 1;
+    const k = seg(t, MUSIC.from, MUSIC.from + 1.2) * clamp01((END - 0.3 - t) / 2.6) * talk * (sirenAt(t) ? 0.8 : 1);
+    MUSIC.gain.gain.setTargetAtTime(MUSIC.vol * k, ac.currentTime, 0.08);
+  }
+  let ranOut = false;   // the episode played to the end: its last chime may ring out
+  function hush() {   // every sound off at once (pause, scrub, leaving)
+    stopMusic(); if (!ranOut) SND.stop(); SIREN.stop(); ENGINE.stop(); stopNarr();
+    if (voiceSrc) say([]);
   }
 
   /* ---------- cue sheet: sounds and voices by time ---------- */
   function ring(at = 0) { for (let k = 0; k < 8; k++) tone('sine', k % 2 ? 1175 : 1397, at + k * 0.07, 0.07, 0.06); }
   function giggle() { [0, 0.12, 0.24].forEach((s, i) => tone('sine', 880 + i * 120, s, 0.1, 0.08, 1100 + i * 120)); }
-  function click(f = 220) { tone('square', f, 0, 0.05, 0.06); tone('square', f * 1.5, 0.07, 0.05, 0.05); }
+  const play = (k, rate, vol) => () => SND.play(k, rate, vol);
   const CUES = [
     [0.3, () => narr(1)],
-    [0.55, () => tone('sine', 1300, 0, 0.8, 0.05, 500)],                // wheee down the slide
+    [0.55, () => { tone('sine', 1300, 0, 0.8, 0.04, 500); SND.play('slide', 1.2); }],   // wheee down the slide
     [1.45, () => SFX.boop(1.1)],
     [3.5, () => tone('triangle', 520, 0, 0.18, 0.1, 260)],              // whoops
-    [3.8, () => { noise(0, 0.15, 0.18, 300, 1); tone('sine', 200, 0, 0.2, 0.14, 120); }],
+    [3.8, play('thud', 0.9)],
     [3.95, () => narr(2)],
     [5.25, () => SFX.hmm()],
     [6.85, () => ring()], [7.65, () => ring()],
     [6.95, () => narr(3)],
-    [9.1, () => SFX.door()],
-    [9.6, () => { if (!st.stopSiren) st.stopSiren = siren('amb'); }],
+    [9.1, play('door')], [9.35, play('start')],
     [9.8, () => say('ambulance-on-the-way')],
     [11.4, () => narr(4, 'here-comes-the-ambulance')],
-    [13.55, () => SFX.whoosh()],
+    [13.55, play('whoosh')],
     [14.1, () => narr(5)],
-    [17.5, () => SFX.brake()],
-    [18.0, () => stopSiren()],
+    [17.5, play('brake')],
     [18.1, () => narr(6, 'ambulance-here-to-help')],
     [18.25, () => SFX.boop(0.9)], [18.45, () => SFX.boop(1.0)],
     [19.3, () => narr(7)],
     [20.15, () => SFX.boop(1.4)],
     [21.6, () => { SFX.paint(); }],
-    [22.0, () => SFX.chime()],
+    [22.0, play('chime')],
     [22.95, () => giggle()], [23.6, () => giggle()],
     [24.9, () => SFX.boop(1.3)], [25.0, () => narr(8)], [25.4, () => SFX.pop()],
-    [26.95, () => click(200)],
-    [27.1, () => SFX.beep()],
-    [27.65, () => SFX.chime()],
-    [29.05, () => SFX.fanfare()],
+    [26.95, play('click')],
+    [27.1, play('beep')],
+    [27.65, play('chime')],
+    [29.05, play('applause')],
     [29.45, () => narr(9, 'you-did-it')],
     [30.55, () => narr(10)],
-    [30.95, () => SFX.beep()],
-    [32.3, () => SFX.door()],
-    [32.4, () => SFX.sunrise()],
+    [30.95, play('beep')],
+    [32.3, play('door')],
+    [32.4, play('twinkle')],
   ];
-  function stopSiren() { if (st.stopSiren) { st.stopSiren(); st.stopSiren = null; } }
 
   /* ---------- little drawing kit ---------- */
   // U(cx, cy, u) -> rect painter in units of u screen pixels (seamless at any scale)
@@ -868,7 +932,7 @@
       lit() { hospitalSide(true, P.bayOpen); },
       upd(lt, dt) {
         const a = P.hAmb;
-        if (a && a.v) { exhaust(dt, a.x, a.yb, Math.abs(a.v), -1); st.beepT -= dt; if (st.beepT <= 0) { st.beepT = 0.4; tone('square', 1046, 0, 0.16, 0.045); } }
+        if (a && a.v) { exhaust(dt, a.x, a.yb, Math.abs(a.v), -1); st.beepT -= dt; if (st.beepT <= 0) { st.beepT = 0.4; if (!st.ff) tone('square', 1046, 0, 0.16, 0.045); } }
         if (rumble) rumble(a && a.v ? 0.08 : 0);
         if (lt > 2.0 && lt < 2.6) confetti(3);
       },
@@ -928,41 +992,92 @@
     if (scene === 'movieAmb') setClouds(L.safeT + 10, L.safeT + (pr ? 90 : 40));
   }
   function enter() {
-    stopSiren();
-    Object.assign(st, { t: 0, shot: -1, cue: 0, fired: {}, done: false, tune: 0, hearts: [], cars: [], puffT: 0, beepT: 0, run: (st.run || 0) + 1 });
+    ranOut = false; hush();
+    Object.assign(st, { t: 0, shot: -1, cue: 0, fired: {}, done: false, hearts: [], cars: [], puffT: 0, beepT: 0, run: (st.run || 0) + 1, paused: false, ui: 0, drag: null, ff: false });
+    resumeLine = null;
     camS = null;
     if (!st.saved) st.saved = clouds;
     layout();
     for (let n = 1; n <= 10; n++) loadNarr(n);
+    loadSound();
   }
   function leave() {
     st.run = (st.run || 0) + 1;
-    stopSiren();
-    if (rumble) rumble(0);
-    for (const s of narrSrcs.splice(0)) { try { s.stop(); } catch (e) {} }
-    narrEnd = 0;
+    hush(); resumeLine = null;
+    st.paused = false; st.drag = null; st.ui = 0;
     if (st.saved) { clouds = st.saved; st.saved = null; }
   }
   function finish() {
     if (st.done) return;
-    st.done = true;
+    st.done = true; hush();
     goScene(SCENES.movies ? 'movies' : 'station', { watched: 'amb' });
   }
   function update(dt) {
     if (st.done) return;
+    loadSound();
+    st.ui = Math.max(0, st.ui - dt);
+    if (st.paused || st.drag != null) { hush(); if (st.shot >= 0) SHOTS[st.shot].cam(st.lt, 0); return; }
     st.t += dt;
-    if (!rumble) rumble = noiseLoop(110, 0.7);
     while (st.cue < CUES.length && CUES[st.cue][0] <= st.t) { const fn = CUES[st.cue++][1]; if (CUES[st.cue - 1][0] > st.t - 0.5) fn(); }
-    tuneTick();
+    musicTick();
+    SIREN.set(sirenAt(st.t) ? 1 : 0);
     const i = shotAt(st.t), s = SHOTS[i];
-    if (i !== st.shot) { st.shot = i; camS = null; if (rumble) rumble(0); if (s.start) s.start(); }
+    if (i !== st.shot) { st.shot = i; camS = null; if (s.start) s.start(); }
     st.lt = st.t - s.a;
     s.cam(st.lt, dt);
+    st.rumbled = false;
     if (s.upd) s.upd(st.lt, dt);
+    if (!st.rumbled) ENGINE.set(0);
     for (const h of st.hearts) { h.life -= dt; h.x += h.vx * dt; h.y += h.vy * dt; }
     st.hearts = st.hearts.filter(h => h.life > 0);
-    if (st.t >= END) finish();
+    if (st.t >= END) { ranOut = true; finish(); }
   }
+
+  /* ---------- pause button and draggable timeline (tap anywhere to show them) ---------- */
+  function ctl() {
+    const b = 26, cy = H - L.safeB - 30, cx = Math.round(W / 2), half = Math.round(Math.min(W - L.safeL - L.safeR - 32, 360) / 2);
+    return { play: { x: cx - b / 2, y: cy - b / 2, s: b }, track: { x0: cx - half, x1: cx + half, y: cy - b / 2 - 14 } };
+  }
+  const tAtX = (c, x) => END * clamp01((x - c.track.x0) / (c.track.x1 - c.track.x0));
+  function drawControls() {
+    const c = ctl(), k = Math.min(1, st.paused ? 1 : st.ui / 0.3);
+    if (k <= 0) return;
+    alpha(k, () => {
+      const { x0, x1, y } = c.track, w = x1 - x0;
+      alpha(0.45, () => R(x0 - 6, y - 8, w + 12, 16, BLACK));
+      R(x0, y - 1, w, 3, '#6a6478');
+      for (const s of SHOTS) R(Math.round(x0 + w * s.a / END), y - 3, 1, 7, '#cfc8dc');
+      const kx = Math.round(x0 + w * Math.min(1, st.t / END));
+      R(x0, y - 1, kx - x0, 3, '#ffd21f'); circle(kx, y, 5, '#ffffff'); circle(kx, y, 3, '#ffd21f');
+      const b = c.play, mx = b.x + b.s / 2, my = b.y + b.s / 2;
+      alpha(0.55, () => R(b.x, b.y, b.s, b.s, BLACK));
+      if (st.paused) for (let i = 0; i < 6; i++) R(mx - 3 + i, my - 6 + i, 1, 13 - 2 * i, '#ffffff');
+      else { R(mx - 5, my - 6, 4, 13, '#ffffff'); R(mx + 1, my - 6, 4, 13, '#ffffff'); }
+    });
+  }
+  function setPaused(p) {
+    if (p === st.paused) return;
+    st.paused = p;
+    if (p) { resumeLine = ac && ac.currentTime < narrEnd - 0.2 ? lastLine : null; hush(); }   // a line cut off by the pause starts over on play
+    else if (resumeLine) { const n = resumeLine; resumeLine = null; narr(n); }
+  }
+  // jump to any moment: past cues stay quiet, the siren, engine and music pick up from the clock
+  function seek(t) {
+    hush(); resumeLine = null; st.run = (st.run || 0) + 1;
+    const target = clamp(t, 0, END - 0.05);
+    st.cue = 0; while (st.cue < CUES.length && CUES[st.cue][0] <= target) st.cue++;
+    st.fired = {};
+    // replay the shot quietly up to now, so whatever moves in it (cars pulling over) is in place
+    const i = shotAt(target), s = SHOTS[i], dt = 1 / 30;
+    st.shot = i; camS = null; if (s.start) s.start();
+    st.ff = true;
+    try {
+      for (st.t = s.a; st.t < target; st.t = Math.min(target, st.t + dt)) { st.lt = st.t - s.a; s.cam(st.lt, dt); if (s.upd) s.upd(st.lt, dt); }
+    } finally { st.ff = false; }
+    st.t = target; st.lt = st.t - s.a; s.cam(st.lt, dt);
+    parts = []; st.hearts = [];
+  }
+
   function iris(k, cx, cy) {
     if (k >= 1) return;
     const rad = ease(clamp01(k)) * Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy));
@@ -1014,12 +1129,24 @@
       const bx = L.safeL + 8, bw = W - L.safeL - L.safeR - 16, by = H - L.safeB - 5;
       alpha(0.35, () => R(bx, by, bw, 2, BLACK));
       alpha(0.85, () => R(bx, by, Math.round(bw * clamp01(st.t / END)), 2, '#fff6e0'));
+      drawControls();
       drawHomeButton(homeBtn());
     },
-    tap(x, y) {
+    tap(x, y, id) {
       if (inBox(homeBtn(), x, y)) { SFX.boop(); finish(); return true; }
+      const c = ctl();
+      if (st.paused || st.ui > 0) {
+        st.ui = 3.5;
+        if (inBox(c.play, x, y, 6)) { setPaused(!st.paused); return true; }
+        if (x >= c.track.x0 - 10 && x <= c.track.x1 + 10 && Math.abs(y - c.track.y) <= 14) { st.drag = id; seek(tAtX(c, x)); return true; }
+      }
+      st.ui = 3.5;
       sparkle(x, y, 4, 3, '#ffffff');
       return true;
     },
+    move(x, y, id) { if (st.drag === id) { st.ui = 3.5; seek(tAtX(ctl(), x)); } },
+    release(id) { if (st.drag === id) { st.drag = null; st.ui = 3.5; } },
+    get clock() { return st.t; },   // seconds into the episode (read-only, for tests)
+    _st: st, _jump(t) { seek(t); }, _paused(p) { setPaused(p); },
   };
 })();

@@ -46,12 +46,12 @@
   let t = 0, ev = 0, shotI = -1, exiting = false;
   let Z = 1, WW = 100, HH = 100, SL = 0, SR = 0, ST = 0, SB = 0;
   let shakeX = 0, shakeY = 0, push = 1, focus = [0, 0];
-  let stopSiren = null, sirenOn = false, music = false, musicT = 0, musicI = 0, narrSrc = null, narrEnd = 0;
+  let narrSrc = null, narrEnd = 0, lastLine = null, resumeLine = null;
   const narrSrcs = [];
+  const ctlS = { paused: false, ui: 0, drag: null };   // pause button and the draggable timeline
   let hearts = [], taps = [], lights = [], car = null;
   const onceSet = new Set();
   const once = key => !onceSet.has(key) && !!onceSet.add(key);
-  const spray = noiseLoop(1400, 0.7);
   const buf = document.createElement('canvas'), bufG = buf.getContext('2d');
   const sp = document.createElement('canvas'), spG = sp.getContext('2d');   // small sprite canvas
   sp.width = 28; sp.height = 40;
@@ -75,6 +75,7 @@
   }
   function narrate(n, fallback) {
     if (!ac) return;
+    lastLine = n;
     const p = narrBuf[n];
     const go = b => {
       if (!b) { if (fallback) say(fallback === 'praise' ? pick('praise') : fallback); return; }
@@ -96,48 +97,118 @@
   }
   function stopNarr() { for (const s of narrSrcs.splice(0)) { try { s.stop(); } catch (e) {} } narrSrc = null; narrEnd = 0; }
 
-  /* ---------- music: a little marching tune, scheduled note by note ---------- */
-  const NOTE = m => 440 * 2 ** ((m - 69) / 12);
-  const MEL = [76, 79, 84, 79, 81, 79, 76, 0, 77, 81, 86, 81, 79, 77, 74, 0, 76, 79, 84, 79, 81, 84, 86, 88, 86, 84, 81, 79, 84, 0, 84, 0];
-  const BASS = [48, 48, 43, 43, 48, 53, 43, 48];
-  const STEP = 0.19;
-  function tickMusic() {
-    if (!ac || !music) return;
-    const now = ac.currentTime;
-    if (musicT < now) musicT = now + 0.05;
-    while (musicT < now + 0.25) {
-      const st = musicT - now, m = MEL[musicI % MEL.length], v = sirenOn ? 0.022 : 0.05;
-      if (m) { tone('triangle', NOTE(m), st, 0.17, v); tone('sine', NOTE(m + 12), st, 0.08, v * 0.25); }
-      if (musicI % 4 === 0) tone('sine', NOTE(BASS[(musicI / 4 | 0) % BASS.length]), st, 0.34, v * 1.5);
-      if (musicI % 4 === 2) noise(st, 0.04, v * 0.6, 6000, 1);
-      musicT += STEP; musicI++;
+  /* ---------- sound track: recorded CC0 clips (the synth plays if a clip is missing) ---------- */
+  // (toys.js loads after this file, so the bank is made on first use)
+  const SND_FILES = {
+    bell: ['rescue-bell', 0.42], slide: ['rescue-slide', 0.32], thud: ['rescue-thud', 0.45], door: ['rescue-door', 0.3],
+    start: ['rescue-start', 0.28], horn: ['rescue-horn', 0.34], brake: ['trash-air', 0.26], meow: ['cat-meow', 0.42], meow2: ['cat-meow2', 0.42],
+    steam: ['boat-steam', 0.42], chime: ['mv-chime', 0.5], ratchet: ['mc-ratchet', 0.3], applause: ['rescue-applause', 0.4], twinkle: ['mc-twinkle', 0.4],
+  }, SND_SYNTH = {
+    bell() { SFX.bell(); }, slide() { SFX.whoosh(); }, thud() { tone('sine', 120, 0, 0.25, 0.25, 45); noise(0, 0.12, 0.12, 300, 1); },
+    door() { SFX.door(); }, horn() { SFX.honk(); }, brake() { SFX.brake(); }, meow() { SFX.meow(); }, meow2() { SFX.meow(); },
+    steam() { SFX.sizzle(); }, chime() { SFX.chime(); }, applause() { SFX.fanfare(); }, twinkle() { SFX.sunrise(); },
+  };
+  let bank = null;
+  const live = new Set();   // clips still sounding, so a pause or the home button can cut them off
+  const SND = {
+    bank: () => bank || (bank = TOY.bank(SND_FILES, SND_SYNTH)),
+    load() { SND.bank().load(); },
+    play(k, rate, vol) {
+      const src = SND.bank().play(k, rate, vol);
+      if (src) { live.add(src); src.onended = () => live.delete(src); }
+      return src;
+    },
+    stop() { for (const s of live) { try { s.stop(); } catch (e) {} } live.clear(); },
+  };
+  function getBuf(n) {
+    return fetch('audio/' + n + '.mp3').then(r => r.ok ? r.arrayBuffer() : null)
+      .then(ab => ab && new Promise(res => { try { ac.decodeAudioData(ab, res, () => res(null)); } catch (e) { res(null); } })).catch(() => null);
+  }
+  // A looping bed (siren, hose, engine) whose level follows the episode clock: set(level) every frame.
+  // synth(level, state) -> state is the stand-in while the recording is missing.
+  function bed(name, vol, synth) {
+    let buf = null, asked = false, src = null, gn = null, fb = null;
+    const B = {
+      load() { if (!asked && ac) { asked = true; getBuf(name).then(b => { buf = b; }); } },
+      set(level) {
+        if (!ac) return;
+        if (level <= 0.001) { B.stop(); return; }
+        if (buf) {
+          if (!src) {
+            src = ac.createBufferSource(); gn = ac.createGain();
+            src.buffer = buf; src.loop = true; gn.gain.value = 0;
+            src.connect(gn); gn.connect(master); src.start();
+          }
+          gn.gain.setTargetAtTime(level * vol, ac.currentTime, 0.06);
+        } else if (synth) fb = synth(level, fb);
+      },
+      stop() {
+        if (src) { const n = ac.currentTime; gn.gain.cancelScheduledValues(n); gn.gain.setTargetAtTime(0, n, 0.05); try { src.stop(n + 0.3); } catch (e) {} src = null; gn = null; }
+        if (fb) fb = synth(0, fb);
+      },
+    };
+    return B;
+  }
+  const noiseBed = (f, q, k) => (lv, s) => { s = s || noiseLoop(f, q); s(lv * k); return s; };
+  const SIREN = bed('rescue-siren-fire', 0.2, (lv, s) => lv > 0 ? s || siren('fire') : (s && s(), null));
+  const HOSE = bed('rescue-hose', 0.3, noiseBed(1400, 0.7, 0.3));
+  const CRACKLE = bed('rescue-crackle', 0.28, noiseBed(3000, 0.4, 0.05));
+  const ENGINE = bed('rescue-engine', 0.12, noiseBed(110, 0.7, 0.08));
+  const BEDS = [SIREN, HOSE, CRACKLE, ENGINE];
+  const sirenAt = tt => tt >= 8.5 && tt < 18.6;
+
+  // music: a cheerful adventure loop, in step with the clock (pause and the timeline included)
+  const MUSIC = { name: 'rescue-fire-music', vol: 0.17, from: 0.1, buf: null, src: null, gain: null, asked: false };
+  function loadSound() {
+    if (!ac) return;
+    SND.load(); BEDS.forEach(b => b.load());
+    if (!MUSIC.asked) { MUSIC.asked = true; getBuf(MUSIC.name).then(b => { MUSIC.buf = b; }); }
+  }
+  function stopMusic() { if (MUSIC.src) { try { MUSIC.src.stop(); } catch (e) {} MUSIC.src = null; MUSIC.gain = null; } }
+  function musicTick() {
+    if (!MUSIC.buf || !ac) return;
+    if (!MUSIC.src && t >= MUSIC.from && t < END - 0.3) {
+      const src = ac.createBufferSource(), gn = ac.createGain();
+      src.buffer = MUSIC.buf; src.loop = true; gn.gain.value = 0;
+      const off = (t - MUSIC.from) % MUSIC.buf.duration;
+      src.connect(gn); gn.connect(master); src.start(0, off);
+      Object.assign(MUSIC, { src, gain: gn, at: ac.currentTime, off });
     }
+    if (!MUSIC.gain) return;
+    // a slow frame holds the picture back while the music runs on: start over in step if they drift apart
+    const dur = MUSIC.buf.duration, want = (t - MUSIC.from) % dur, have = (MUSIC.off + ac.currentTime - MUSIC.at) % dur;
+    if (Math.min(Math.abs(want - have), dur - Math.abs(want - have)) > 0.35) { stopMusic(); return; }
+    // softer under a narration line (the master dips too) and under the siren; fades in, and out at the end
+    const talk = ac.currentTime < Math.max(narrEnd, voiceUntil) ? 0.7 : 1;
+    const k = clamp((t - MUSIC.from) / 1.2, 0, 1) * clamp((END - 0.3 - t) / 2.6, 0, 1) * talk * (sirenAt(t) ? 0.8 : 1);
+    MUSIC.gain.gain.setTargetAtTime(MUSIC.vol * k, ac.currentTime, 0.08);
+  }
+  let ranOut = false;   // the episode played to the end: its last chime may ring out
+  function hush() {   // every sound off at once (pause, scrub, leaving)
+    stopMusic(); if (!ranOut) SND.stop(); BEDS.forEach(b => b.stop()); stopNarr();
+    if (voiceSrc) say([]);
   }
 
   /* ---------- sound cues ---------- */
-  const thud = () => { tone('sine', 120, 0, 0.25, 0.25, 45); noise(0, 0.12, 0.12, 300, 1); };
+  const play = (k, rate, vol) => () => SND.play(k, rate, vol);
   const EVENTS = [
-    [0.1, () => { music = true; }],
-    [2.65, () => SFX.bell()],
-    [4.6, () => SFX.whoosh()], [5.2, () => SFX.whoosh()],
-    [6.65, thud], [7.05, thud],
-    [7.75, () => SFX.door()],
-    [8.5, () => { stopSiren = siren('fire'); sirenOn = true; }],
-    [13.3, () => SFX.beep()],
+    [2.65, play('bell')],
+    [4.6, play('slide')], [5.2, play('slide', 1.1, 0.8)],
+    [6.65, play('thud')], [7.05, play('thud', 1.1)],
+    [7.75, play('door')], [8.0, play('start')],
+    [13.3, play('horn')], [13.65, play('horn')],
     [15.7, () => say('fire-truck-to-the-rescue', true)],
-    [16.6, () => SFX.honk()],
-    [18.6, () => { if (stopSiren) stopSiren(); stopSiren = null; sirenOn = false; SFX.brake(); }],
-    [19.1, () => SFX.meow()],
+    [16.6, play('horn', 0.95)],
+    [18.6, play('brake')],
+    [19.1, play('meow')],
     [19.3, () => SFX.boop(1)], [19.6, () => SFX.boop(1.2)],
-    [20.8, () => SFX.water()],
-    [22.35, () => SFX.sizzle()], [22.7, () => SFX.chime()],
-    [24.0, () => tone('triangle', 330, 0, 1.2, 0.05, 660)],
-    [25.1, () => SFX.meow()], [25.3, () => SFX.chime()],
-    [26.7, () => SFX.fanfare()], [27.9, () => SFX.meow()],
-    [29.9, () => SFX.honk()],
-    [31.1, () => SFX.door()],
-    [31.8, () => { SFX.chime(); SFX.sunrise(); }],
-    [32.6, () => { music = false; }],
+    [22.35, play('steam')], [22.7, play('chime')],
+    [24.0, () => { tone('triangle', 330, 0, 1.2, 0.04, 660); SND.play('ratchet'); }], [24.4, play('ratchet', 1.1)], [24.8, play('ratchet', 1.2)],
+    [25.1, play('meow2')], [25.3, play('chime')],
+    [26.7, play('applause')], [27.9, play('meow', 1.1)],
+    [29.9, play('horn')],
+    [31.1, play('door')],
+    [31.8, () => { SND.play('chime'); SND.play('twinkle'); }],
   ];
   for (const [tt, n, , fb] of NARR) EVENTS.push([tt, () => narrate(n, fb)]);
   EVENTS.sort((a, b) => a[0] - b[0]);
@@ -814,6 +885,12 @@
       }
     }
   }
+  function carStep(u, dt) {   // the car ahead pulls over for the fire truck
+    const ta = truckA7(u);
+    if (!car.over && ta + 66 > car.a - 50) car.over = true;
+    car.a += car.v * dt;
+    if (car.over) { car.b = Math.min(car.b + dt * 30, 9); car.v = Math.max(0, car.v - dt * 45); }
+  }
   function tickShot(i, u, dt, G) {
     if (i === 2 && u > 1.9 && Math.random() < dt * 10) exhaust(G.tx - 1, G.gy - 8);
     if (i === 3) { if (u > 0.25 && once('d1')) dust(G.bx + 4, G.gy - 1, 10); if (u > 0.65 && once('d2')) dust(G.bx + 22, G.gy - 1, 10); }
@@ -822,12 +899,7 @@
       if ((i === 4 ? u > 0.95 : u < 1.6) && Math.random() < dt * 12) exhaust(p.x - 1, p.yb - 7);
       if (i === 12 && u > 2.4 && u < 3.4) for (let k = 0; k < 2; k++) parts.push({ x: rand(0, WW), y: -2, vx: rand(-15, 15), vy: rand(30, 60), g: 40, life: 3, max: 3, s: 2, c: PALETTE[Math.random() * 7 | 0][2][1] });
     }
-    if (i === 6 && car) {
-      const ta = truckA7(u);
-      if (!car.over && ta + 66 > car.a - 50) car.over = true;
-      car.a += car.v * dt;
-      if (car.over) { car.b = Math.min(car.b + dt * 30, 9); car.v = Math.max(0, car.v - dt * 45); }
-    }
+    if (i === 6 && car) carStep(u, dt);
     if (i === 8 && Math.random() < dt * 5) smoke(G.fire.x + G.fire.w / 2, G.fire.y - 4);
     if (i === 9) {
       const s = fireSize(u), w = G.win;
@@ -891,12 +963,49 @@
     }
   }
 
+  /* ---------- pause button and draggable timeline (tap anywhere to show them) ---------- */
+  function ctl() {
+    const b = 26, cy = H - L.safeB - 30, cx = Math.round(W / 2), half = Math.round(Math.min(W - L.safeL - L.safeR - 32, 360) / 2);
+    return { play: { x: cx - b / 2, y: cy - b / 2, s: b }, track: { x0: cx - half, x1: cx + half, y: cy - b / 2 - 14 } };
+  }
+  const tAtX = (c, x) => END * clamp((x - c.track.x0) / (c.track.x1 - c.track.x0), 0, 1);
+  function drawControls() {
+    const c = ctl(), k = Math.min(1, ctlS.paused ? 1 : ctlS.ui / 0.3);
+    if (k <= 0) return;
+    alpha(k, () => {
+      const { x0, x1, y } = c.track, w = x1 - x0;
+      alpha(0.45, () => R(x0 - 6, y - 8, w + 12, 16, '#1d1a2b'));
+      R(x0, y - 1, w, 3, '#6a6478');
+      for (const s of SHOTS) R(Math.round(x0 + w * s.t0 / END), y - 3, 1, 7, '#cfc8dc');
+      const kx = Math.round(x0 + w * Math.min(1, t / END));
+      R(x0, y - 1, kx - x0, 3, '#ffd21f'); circle(kx, y, 5, '#ffffff'); circle(kx, y, 3, '#ffd21f');
+      const b = c.play, mx = b.x + b.s / 2, my = b.y + b.s / 2;
+      alpha(0.55, () => R(b.x, b.y, b.s, b.s, '#1d1a2b'));
+      if (ctlS.paused) for (let i = 0; i < 6; i++) R(mx - 3 + i, my - 6 + i, 1, 13 - 2 * i, '#ffffff');
+      else { R(mx - 5, my - 6, 4, 13, '#ffffff'); R(mx + 1, my - 6, 4, 13, '#ffffff'); }
+    });
+  }
+  function setPaused(p) {
+    if (p === ctlS.paused) return;
+    ctlS.paused = p;
+    if (p) { resumeLine = ac && ac.currentTime < narrEnd - 0.2 ? lastLine : null; hush(); }   // a line cut off by the pause starts over on play
+    else if (resumeLine) { const n = resumeLine; resumeLine = null; narrate(n); }
+  }
+  // jump to any moment: past cues stay quiet, the siren, hose and music pick up from the clock
+  function seek(tt) {
+    hush(); resumeLine = null;
+    t = clamp(tt, 0, END - 0.05);
+    ev = 0; while (ev < EVENTS.length && EVENTS[ev][0] <= t) ev++;
+    parts = []; hearts = []; onceSet.clear(); car = null;
+    shotI = shotAt(t);
+    if (shotI === 6) { car = { a: truckA7(0) + 130, b: -4, v: 50, over: false }; for (let u = 0; u < t - SHOTS[6].t0; u += 1 / 60) carStep(u, 1 / 60); }
+  }
+
   /* ---------- scene ---------- */
   const homeBtn = () => ({ x: L.safeL + 6, y: L.safeT + 6, s: 22 });
   function leave() {
-    music = false; spray(0); sirenOn = false;
-    if (stopSiren) { stopSiren(); stopSiren = null; }
-    stopNarr();
+    hush(); resumeLine = null;
+    ctlS.paused = false; ctlS.drag = null; ctlS.ui = 0;
   }
   function exit() {
     if (exiting) return;
@@ -908,35 +1017,51 @@
     view: [186, 200],
     freeTouch: true,
     groundY: () => H,
+    get clock() { return t; },   // seconds into the episode (read-only, for tests)
     enter() {
-      t = 0; ev = 0; shotI = -1; exiting = false; hearts = []; taps = []; car = null;
-      music = false; musicI = 0; musicT = 0; sirenOn = false;
+      t = 0; ev = 0; shotI = -1; exiting = false; ranOut = false; hearts = []; taps = []; car = null;
+      Object.assign(ctlS, { paused: false, ui: 0, drag: null }); resumeLine = null;
       setClouds(L.safeT + 16, Math.floor(H * 0.3));
-      loadNarration();
+      loadNarration(); loadSound();
     },
     leave,
     update(dt) {
       if (exiting) return;
+      if (!narrBuf[NARR[0][1]] && ac) loadNarration();   // audio woke up after enter
+      loadSound();
+      ctlS.ui = Math.max(0, ctlS.ui - dt);
+      for (const p of taps) p.life -= dt;
+      taps = taps.filter(p => p.life > 0);
+      if (ctlS.paused || ctlS.drag != null) { hush(); return; }
       t += dt;
       while (ev < EVENTS.length && EVENTS[ev][0] <= t) EVENTS[ev++][1]();
-      if (!narrBuf[NARR[0][1]] && ac) loadNarration();   // audio woke up after enter
-      tickMusic();
       const { i, u, G } = frameState();
       if (i !== shotI) {
         shotI = i; parts = []; hearts = []; onceSet.clear();
         if (i === 6) car = { a: truckA7(0) + 130, b: -4, v: 50, over: false };
       }
-      spray(i === 9 && u > 0.3 && u < 2.0 ? 0.3 : 0);
+      musicTick();
+      SIREN.set(sirenAt(t) ? 1 : 0);
+      HOSE.set(i === 9 && u > 0.3 && u < 2.0 ? 1 : 0);
+      CRACKLE.set(i === 8 ? 0.7 : i === 9 ? fireSize(u) : 0);
+      ENGINE.set(t > 8.1 && t < 18.8 ? 1 : i === 12 && u < 1.8 ? 0.8 : 0);
       tickShot(i, u, dt, G);
-      for (const p of taps) p.life -= dt;
-      taps = taps.filter(p => p.life > 0);
-      if (t >= END) exit();
+      if (t >= END) { ranOut = true; exit(); }
     },
-    tap(x, y) {
+    tap(x, y, id) {
       if (inBox(homeBtn(), x, y, 6)) { SFX.pop(); exit(); return true; }
+      const c = ctl();
+      if (ctlS.paused || ctlS.ui > 0) {
+        ctlS.ui = 3.5;
+        if (inBox(c.play, x, y, 6)) { setPaused(!ctlS.paused); return true; }
+        if (x >= c.track.x0 - 10 && x <= c.track.x1 + 10 && Math.abs(y - c.track.y) <= 14) { ctlS.drag = id; seek(tAtX(c, x)); return true; }
+      }
+      ctlS.ui = 3.5;
       taps.push({ x, y, life: 0.6 });
       return true;
     },
+    move(x, y, id) { if (ctlS.drag === id) { ctlS.ui = 3.5; seek(tAtX(ctl(), x)); } },
+    release(id) { if (ctlS.drag === id) { ctlS.drag = null; ctlS.ui = 3.5; } },
     drawWorld() {
       const { i, u, G } = frameState();
       lights = [];
@@ -962,7 +1087,9 @@
       const x0 = L.safeL + 10, x1 = W - L.safeR - 10, y = H - L.safeB - 4;
       alpha(0.35, () => R(x0, y, x1 - x0, 2, '#1d1a2b'));
       alpha(0.8, () => R(x0, y, Math.round((x1 - x0) * clamp(t / END, 0, 1)), 2, '#fff6e0'));
+      drawControls();
       drawHomeButton(homeBtn());
     },
+    _st: ctlS, _jump(tt) { seek(tt); }, _paused(p) { setPaused(p); },
   };
 })();

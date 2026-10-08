@@ -1,6 +1,6 @@
 // Offline support: everything the game needs is cached on first visit.
 // Bump VERSION whenever any file changes so devices pick up the update.
-const VERSION = 'fire-station-v56';
+const VERSION = 'fire-station-v57';
 const FILES = [
   './',
   './index.html',
@@ -180,6 +180,32 @@ const FILES = [
   './audio/train-whistle2.mp3',
   './audio/wx-rain.mp3',
   './audio/wx-thunder.mp3',
+  './audio/owl-flap.mp3',
+  './audio/rescue-amb-music.mp3',
+  './audio/rescue-applause.mp3',
+  './audio/rescue-bell.mp3',
+  './audio/rescue-click.mp3',
+  './audio/rescue-crackle.mp3',
+  './audio/rescue-door.mp3',
+  './audio/rescue-engine.mp3',
+  './audio/rescue-fire-music.mp3',
+  './audio/rescue-horn.mp3',
+  './audio/rescue-hose.mp3',
+  './audio/rescue-police-music.mp3',
+  './audio/rescue-rustle.mp3',
+  './audio/rescue-siren-amb.mp3',
+  './audio/rescue-siren-fire.mp3',
+  './audio/rescue-siren-police.mp3',
+  './audio/rescue-slide.mp3',
+  './audio/rescue-start.mp3',
+  './audio/rescue-thud.mp3',
+  './audio/st-rocket.mp3',
+  './audio/wash-blower.mp3',
+  './audio/wash-brush.mp3',
+  './audio/wash-music.mp3',
+  './audio/wash-spray.mp3',
+  './audio/wash-squeak.mp3',
+  './audio/wash-whoosh.mp3',
 ];
 
 self.addEventListener('install', e => {

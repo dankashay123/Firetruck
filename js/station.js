@@ -198,8 +198,8 @@
         v.speed = Math.min(150, v.speed + 260 * dt);
         v.x += v.speed * dt;
         if (!v.lap && v.x > W + 8) {
-          if (v.hold) { v.state = 'hold'; v.x = W + 200; if (v.stopSiren) v.stopSiren(); v.stopSiren = null; continue; }
-          if (v.mission) { const m = v.mission; v.mission = null; v.state = 'away'; v.x = W + 200; goScene(m, { v: V.indexOf(v) }); continue; }
+          if (v.hold && !v.mission) { v.state = 'hold'; v.x = W + 200; if (v.stopSiren) v.stopSiren(); v.stopSiren = null; continue; }
+          if (v.mission) { const m = v.mission; v.hold = false; v.mission = null; v.state = 'away'; v.x = W + 200; goScene(m, { v: V.indexOf(v) }); continue; }
           v.x = -v.len - 8; v.lap = true; say('back-to-the-station', true);
         }
         if (v.lap && v.x >= v.homeX - 45) v.state = 'arrive';
@@ -227,10 +227,12 @@
   /* ---------- missions & bedtime ---------- */
   function launch(k) {
     menu.open = false;
+    if (typeof FX !== 'undefined' && FX.drill && k !== 'bed') FX.cancelDrill();
     if (k === 'bed') { bed.on ? wakeUp() : bedtime(); return; }
     if (bed.on) return;
     if (!SCENES[k]) return;   // that mini-game isn't installed
     if (['help', 'chopper', 'stickers', 'movies', 'drive', 'icecream', 'dig', 'bath', 'trash', 'train', 'boat', 'builder'].includes(k)) { SFX.chime(); goScene(k); return; }
+    for (const v of V) if (v.state === 'hold') { v.hold = false; Object.assign(v, { state: 'drive', lap: true, x: -v.len - 8, y: L.laneY, speed: 90 }); }
     if (k === 'wash') { if (pendingMission) return; SFX.chime(); say(pick(V[selected].kind)); launchMission(selected, 'wash'); return; }
     if (pendingMission) return;
     SFX.bell(); bell.swing = 1.4;
@@ -282,7 +284,13 @@
   };
 
   /* ---------- update ---------- */
+  let pendingT = 0;
   function update(dt) {
+    pendingT = pendingMission ? pendingT + dt : 0;
+    if (pendingT > 8) {   // the vehicle never left (it shouldn't happen): unlock everything
+      for (const v of V) if (v.mission) { v.mission = null; if (v.state === 'hold' || v.state === 'away') Object.assign(v, { state: 'drive', lap: true, x: -v.len - 8, y: L.laneY, speed: 90 }); }
+      pendingMission = null; pendingT = 0;
+    }
     menu.k += Math.sign((menu.open ? 1 : 0) - menu.k) * Math.min(Math.abs((menu.open ? 1 : 0) - menu.k), dt * 4);
     updateVehicles(dt);
     updateCrew(dt);
@@ -956,7 +964,7 @@
       drawHills(L.hillY, L.floorY);
       drawTrees();
       drawBuilding();
-      if (typeof FX !== 'undefined') FX.drawBell();
+      if (typeof FX !== 'undefined') { FX.drawBell(); FX.drawOwl(); }
       YARD.drawBack(bed.on);
       if (bed.asleep) for (const f of B.floors) { drawRoom(f, false); drawCrew(f.i); stationPets(f); alpha(0.35, () => R(f.x0, f.top, f.x1 - f.x0, f.fy - f.top + 2, '#0b1030')); }
       drawRoad();

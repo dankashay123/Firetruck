@@ -11,7 +11,7 @@ const FX = (() => {
   const P = {};   // layout
   let api = null;  // hooks into the station: rush, trips, allHome, hop, pending, bed
 
-  const SND = TOY.bank({ thunder: ['wx-thunder', 0.8], rain: ['wx-rain', 0.5], splash: ['bath-splash', 0.55], splash2: ['bath-splash2', 0.5], bark: ['dog-bark', 0.6], bark2: ['dog-bark-2', 0.55], meow: ['cat-meow', 0.5] }, {
+  const SND = TOY.bank({ flap: ['owl-flap', 0.5], thunder: ['wx-thunder', 0.8], rain: ['wx-rain', 0.5], splash: ['bath-splash', 0.55], splash2: ['bath-splash2', 0.5], bark: ['dog-bark', 0.6], bark2: ['dog-bark-2', 0.55], meow: ['cat-meow', 0.5] }, {
     thunder() { noise(0, 2.2, 0.12, 90, 0.6); noise(0.1, 1.4, 0.08, 160, 0.8); }, splash() { noise(0, 0.4, 0.12, 1400, 0.7); }, splash2() { noise(0, 0.5, 0.1, 1100, 0.7); },
     bark() { tone('square', 330, 0, 0.09, 0.08, 220); }, bark2() { tone('square', 290, 0, 0.09, 0.08, 200); }, meow() { tone('sine', 700, 0, 0.4, 0.06, 500); },
   });
@@ -46,6 +46,11 @@ const FX = (() => {
     api.rush();
     st.zoom = 7;
   }
+  function cancelDrill() {
+    if (!st.drill) return;
+    st.drill = null; st.ring = 0; st.zoom = 0;
+    for (const vi of ORDER) if (api) api.release(vi);   // anyone waiting off screen comes home
+  }
   function updateDrill(dt) {
     const d = st.drill; if (!d) return;
     d.t += dt;
@@ -64,8 +69,9 @@ const FX = (() => {
       if (d.i >= list.length) d.phase = 'end';
       else {
         const vi = list[d.i];
+        d.slow = (d.slow || 0) + dt;
         if (api.held(vi)) { if ((d.wait -= dt) <= 0) api.release(vi); }
-        else if (api.parked(vi)) { d.i++; d.wait = 0.4; }
+        else if (api.parked(vi) || d.slow > 15) { d.i++; d.wait = 0.4; d.slow = 0; }
       }
     } else if (d.phase === 'end' && !d.done) {
       d.done = true; st.cheer = 2;
@@ -170,6 +176,89 @@ const FX = (() => {
     // peeking: eyes open between naps
     if (Math.floor(T * 0.6) % 3) { R(x - 5, y - 5, 1, 1, '#a8d048'); R(x - 3, y - 5, 1, 1, '#a8d048'); }
   }
+  /* ---------- the owl on the bell tower ---------- */
+  // She sits on the very top of the tower, blinks and turns her head, hoots now and then, and every
+  // so often flies a few loops around the sky before coming back to land on her spot.
+  const owl = { state: 'perch', t: 8, x: 0, y: 0, vx: 0, vy: 0, wps: [], dir: 1, look: 0, lookT: 2, blink: 0, hop: 0, hootT: 9 };
+  const perch = () => [P.B.towerX, P.B.top - 38];
+  function hoot(soft) {
+    const v = soft ? 0.035 : 0.06;
+    tone('sine', 392, 0, 0.32, v, 370); tone('sine', 196, 0, 0.32, v * 0.4, 185);
+    tone('sine', 392, 0.42, 0.22, v, 365); tone('sine', 330, 0.7, 0.55, v, 300);
+  }
+  function takeOff() {
+    const [px, py] = perch(), top = L.safeT + 18, bot = Math.max(top + 30, P.B.top - 46), n = 3 + Math.floor(Math.random() * 3);
+    owl.wps = [];
+    for (let i = 0; i < n; i++) owl.wps.push([rand(L.safeL + 24, W - L.safeR - 24), rand(top, bot)]);
+    owl.wps.push([px + (Math.random() < 0.5 ? -30 : 30), py - 24]);
+    owl.state = 'fly'; owl.x = px; owl.y = py; owl.vx = 0; owl.vy = -30; SND.play('flap');
+  }
+  function updateOwl(dt) {
+    if (!P.B) return;
+    const [px, py] = perch();
+    owl.blink = Math.max(0, owl.blink - dt); owl.hop = Math.max(0, owl.hop - dt * 3);
+    if (owl.state === 'perch') {
+      owl.x = px; owl.y = py;
+      if (Math.random() < dt * 0.4) owl.blink = 0.15;
+      if ((owl.lookT -= dt) <= 0) { owl.lookT = rand(1.5, 4); owl.look = [-1, 0, 0, 1][Math.floor(Math.random() * 4)]; }
+      if ((owl.hootT -= dt) <= 0) { owl.hootT = rand(10, 22); hoot(true); }
+      if ((owl.t -= dt) <= 0 && !st.drill) takeOff();
+    } else if (owl.state === 'fly') {
+      const [tx, ty] = owl.wps[0], dx = tx - owl.x, dy = ty - owl.y, d = Math.hypot(dx, dy) || 1, sp = Math.min(46, 14 + d);
+      owl.vx += (dx / d * sp - owl.vx) * Math.min(1, dt * 2.2); owl.vy += (dy / d * sp - owl.vy) * Math.min(1, dt * 2.2);
+      owl.x += owl.vx * dt; owl.y += owl.vy * dt + Math.sin(T * 6) * 0.15;
+      if (Math.abs(owl.vx) > 3) owl.dir = owl.vx > 0 ? 1 : -1;
+      owl.wpT = (owl.wpT || 0) + dt;
+      if (d < 10 || owl.wpT > 3.5) { owl.wps.shift(); owl.wpT = 0; if (!owl.wps.length) owl.state = 'land'; }   // never circle one spot forever
+    } else if (owl.state === 'land') {
+      const dx = px - owl.x, dy = py - owl.y, d = Math.hypot(dx, dy);
+      owl.dir = dx >= 0 ? 1 : -1;
+      const k = Math.min(1, dt * 3);
+      owl.x += dx * k; owl.y += dy * k;
+      if (d < 1.2) { owl.state = 'perch'; owl.t = rand(14, 28); owl.hop = 1; owl.look = 0; SND.play('flap', 1.2, 0.6); }
+    }
+  }
+  const nc = c => mix(c, '#141a45', nightK() * 0.45);
+  const OB = '#8a5a3a', OD = '#6a3e24', OF = '#e8d0a8', OBL = '#d8b48a', OY = '#ffd21f', OO = '#f5a020';
+  function drawOwl() {
+    if (!P.B) return;
+    const x = Math.round(owl.x), y = Math.round(owl.y - (owl.hop > 0 ? Math.sin(owl.hop * Math.PI) * 2 : 0));
+    if (owl.state === 'perch') {
+      R(x - 4, y - 10, 9, 9, nc(OB)); R(x - 3, y - 11, 7, 1, nc(OB)); R(x - 3, y - 1, 7, 1, nc(OB));
+      R(x - 2, y - 6, 5, 5, nc(OBL)); R(x - 1, y - 5, 1, 1, nc(OD)); R(x + 1, y - 4, 1, 1, nc(OD)); R(x, y - 3, 1, 1, nc(OD));
+      R(x - 5, y - 8, 1, 6, nc(OD)); R(x + 5, y - 8, 1, 6, nc(OD));                       // folded wings
+      R(x - 4, y - 13, 1, 3, nc(OB)); R(x + 4, y - 13, 1, 3, nc(OB));                       // ear tufts
+      R(x - 3, y - 10, 7, 4, nc(OF));                                                         // face
+      const lx = owl.look;
+      if (owl.blink > 0) { R(x - 3, y - 8, 3, 1, nc(OD)); R(x + 1, y - 8, 3, 1, nc(OD)); }
+      else { R(x - 3, y - 9, 3, 3, '#ffffff'); R(x + 1, y - 9, 3, 3, '#ffffff'); R(x - 2 + lx, y - 8, 1, 1, INK); R(x + 2 + lx, y - 8, 1, 1, INK); owl.eyes = [[x - 2, y - 8], [x + 2, y - 8]]; }
+      R(x, y - 7, 1, 2, OO);
+      R(x - 2, y, 2, 1, OO); R(x + 1, y, 2, 1, OO);
+    } else {
+      // side-on in flight, wings beating (or gliding on the way down)
+      const d = owl.dir, P = (dx, dy, w, h, c) => R(d > 0 ? x + dx : x - dx - w + 1, y + dy, w, h, nc(c));
+      const f = owl.state === 'land' || owl.vy > 20 ? 1 : Math.floor(T * 10) % 3;
+      P(-6, -6, 2, 3, OD);                               // tail
+      P(-4, -8, 9, 5, OB); P(-3, -4, 7, 1, OBL);         // body
+      P(4, -11, 5, 5, OB); P(5, -12, 1, 1, OB); P(8, -12, 1, 1, OB); P(6, -10, 3, 3, OF);
+      P(7, -10, 1, 1, INK); P(9, -8, 1, 1, OO);
+      if (f === 0) { P(-2, -14, 6, 2, OD); P(-1, -12, 5, 4, OB); }
+      else if (f === 1) { P(-5, -9, 12, 2, OD); P(-3, -8, 8, 1, OB); }
+      else { P(-1, -4, 5, 4, OB); P(-2, -1, 6, 2, OD); }
+      owl.eyes = null;
+    }
+  }
+  function owlEyesGlow() {
+    const k = nightK();
+    if (k > 0.2 && owl.eyes && owl.state === 'perch' && owl.blink <= 0) alpha(0.35 * k, () => { for (const [ex, ey] of owl.eyes) circle(ex, ey, 2, OY); });
+  }
+  function tapOwl(x, y) {
+    if (Math.abs(x - owl.x) > 10 || y < owl.y - 18 || y > owl.y + 6) return false;
+    hoot(false); word('HOO HOO!', owl.x - 20, owl.y - 24, '#fff3a6'); owl.hop = 1; owl.blink = 0;
+    if (owl.state === 'perch' && Math.random() < 0.6 && !st.drill) setTimeout(takeOff, 500);
+    return true;
+  }
+
   function word(s, x, y, c = '#ffffff') { st.words.push({ s, x, y, c, life: 1.3 }); }
 
   /* ---------- per-frame ---------- */
@@ -177,10 +266,13 @@ const FX = (() => {
     st.ring = Math.max(0, st.ring - dt); st.zoom = Math.max(0, st.zoom - dt); st.cheer = Math.max(0, st.cheer - dt);
     updateDrill(dt);
     updateWeather(dt);
+    updateOwl(dt);
     for (const w of st.words) { w.life -= dt; w.y -= 9 * dt; }
     st.words = st.words.filter(w => w.life > 0);
   }
   function drawLit() {
+    if (owl.state !== 'perch') drawOwl();   // in the air she flies in front of everything
+    owlEyesGlow();
     if (st.bolt) {
       const pts = st.bolt.pts;
       for (let i = 0; i + 1 < pts.length; i++) { TOY.bar(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], 3, '#fff3a6'); TOY.bar(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], 1, '#ffffff'); }
@@ -193,6 +285,7 @@ const FX = (() => {
   }
   function drawFlash() { if (st.flash > 0) alpha(st.flash * 0.55, () => R(0, 0, W, H, '#ffffff')); }
   function tap(x, y) {
+    if (tapOwl(x, y)) return true;
     if ((x - P.bx) ** 2 + (y - P.by) ** 2 <= (P.br + 6) ** 2) {
       if (st.drill) { bellRing(0.6); st.ring = Math.max(st.ring, 0.6); } else startDrill();
       return true;
@@ -201,8 +294,10 @@ const FX = (() => {
     return false;
   }
 
+  function drawOwlPerched() { if (owl.state === 'perch') drawOwl(); }
+
   return {
-    init(hooks) { api = hooks; }, layout, update, drawBell, drawZoomies, drawPuddles, drawCatUnderTruck, drawLit, drawFlash, tap, umbrella, startDrill,
+    init(hooks) { api = hooks; }, layout, update, cancelDrill, drawBell, drawOwl: drawOwlPerched, takeOff, _owl: owl, drawZoomies, drawPuddles, drawCatUnderTruck, drawLit, drawFlash, tap, umbrella, startDrill,
     get rainy() { return rainy(); }, get catHides() { return catHides(); }, get zoom() { return st.zoom > 0; }, get drill() { return !!st.drill; }, get cheer() { return st.cheer > 0; },
     leave() { rainLoop(0); }, _st: st, _P: P,
   };
