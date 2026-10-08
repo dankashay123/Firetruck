@@ -410,6 +410,7 @@
       return true;
     },
     _st: st,
+    _dogs: DOGDRAW,   // the little park-sized dogs, borrowed by other games
     _treat: (i, x, yb, k) => treat(TREATS[i], x, yb, k),   // used by the menu tile
   };
 })();

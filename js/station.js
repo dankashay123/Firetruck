@@ -38,7 +38,7 @@
     B.hydX = B.x + B.w + 6;
     furnish();
     // mini-game launchers: one big menu button that opens into a grid of the rest
-    const kinds = ['fire', 'amb', 'police', 'help', 'wash', 'icecream', 'chopper', 'stickers', 'movies', 'drive', 'bed'];
+    const kinds = ['fire', 'amb', 'police', 'help', 'wash', 'icecream', 'dig', 'bath', 'trash', 'chopper', 'stickers', 'movies', 'drive', 'bed'];
     const side = B.x - L.safeL >= 100 && B.top - L.safeT < 120;
     const sp = side ? 32 : 38, r = side ? 13 : 16;
     const cols = side ? 3 : Math.max(3, Math.min(6, Math.floor((W - L.safeR - L.safeL - 8) / sp)));
@@ -224,7 +224,7 @@
     if (k === 'bed') { bed.on ? wakeUp() : bedtime(); return; }
     if (bed.on) return;
     if (!SCENES[k]) return;   // that mini-game isn't installed
-    if (k === 'help' || k === 'chopper' || k === 'stickers' || k === 'movies' || k === 'drive' || k === 'icecream') { SFX.chime(); goScene(k); return; }
+    if (['help', 'chopper', 'stickers', 'movies', 'drive', 'icecream', 'dig', 'bath', 'trash'].includes(k)) { SFX.chime(); goScene(k); return; }
     if (k === 'wash') { if (pendingMission) return; SFX.chime(); say(pick(V[selected].kind)); launchMission(selected, 'wash'); return; }
     if (pendingMission) return;
     SFX.bell(); bell.swing = 1.4;
@@ -700,8 +700,8 @@
     }
   }
   /* ---------- the game picker: a full-screen page of big picture tiles ---------- */
-  const LABEL = { fire: 'FIRE', amb: 'AMBULANCE', police: 'POLICE', help: 'WHO HELPS?', wash: 'CAR WASH', icecream: 'ICE CREAM', chopper: 'HELICOPTER', stickers: 'STICKERS', movies: 'MOVIES', drive: 'DRIVE', bed: 'BEDTIME' };
-  const TILE_BG = { fire: '#ffd9d4', amb: '#e8f0fa', police: '#d6e4ff', help: '#d9f2d4', wash: '#d4f1fa', icecream: '#ffe0ec', chopper: '#dff1ff', stickers: '#ffdcef', movies: '#e6d9f2', drive: '#ffe6cc', bed: '#e2d6f5' };
+  const LABEL = { fire: 'FIRE', amb: 'AMBULANCE', police: 'POLICE', help: 'WHO HELPS?', wash: 'CAR WASH', icecream: 'ICE CREAM', dig: 'DIGGER', bath: 'DOG BATH', trash: 'GARBAGE', chopper: 'HELICOPTER', stickers: 'STICKERS', movies: 'MOVIES', drive: 'DRIVE', bed: 'BEDTIME' };
+  const TILE_BG = { fire: '#ffd9d4', amb: '#e8f0fa', police: '#d6e4ff', help: '#d9f2d4', wash: '#d4f1fa', icecream: '#ffe0ec', dig: '#ffe9b8', bath: '#d4ecff', trash: '#dcf4d4', chopper: '#dff1ff', stickers: '#ffdcef', movies: '#e6d9f2', drive: '#ffe6cc', bed: '#e2d6f5' };
   /* little picture cards for the picker, drawn with the game's own sprites at its own pixel size */
   const ART_W = 72, ART_H = 50;
   let artCv = null;
@@ -732,6 +732,26 @@
       for (let i = 0; i < 9; i++) circle(i * 8 + 2, 6, 2, i % 2 ? '#ffffff' : '#e8222b');
       const ic = SCENES.icecream && SCENES.icecream._treat;
       if (ic) { const b = Math.round(Math.sin(T * 3)); ic(0, 5, 47 + b, 2); ic(4, 27, 47, 2); ic(5, 49, 47 - b, 2); }
+    },
+    dig: () => {
+      sky(); R(0, 36, ART_W, 14, '#c08a52'); R(0, 36, ART_W, 1, '#a8743f');
+      for (let i = 0; i < 26; i++) { const k = 1 - ((i - 12) / 13) ** 2; if (k > 0) R(i - 4, 37 - Math.round(16 * Math.sqrt(k)), 1, Math.round(16 * Math.sqrt(k)), i > 14 ? '#dcb55c' : '#f2d27a'); }
+      if (SCENES.dig) SCENES.dig.card(35, 48 - Math.round(Math.abs(Math.sin(T * 3))));
+    },
+    bath: () => {
+      R(0, 0, ART_W, 30, '#bfe6ff'); R(0, 30, ART_W, 20, '#6cbf5a');
+      for (let x = 0; x < ART_W; x += 7) { R(x, 18, 6, 12, '#e6b878'); R(x + 6, 18, 1, 12, '#b8884a'); }
+      const D = SCENES.icecream && SCENES.icecream._dogs;
+      if (D) { g.save(); g.translate(20, 38); g.scale(2, 2); D.vizsla(8, 0, 1, { wag: true }); g.restore(); }
+      R(10, 34, 52, 13, '#4a90d0'); R(8, 32, 56, 3, '#a8d4f4'); R(14, 46, 6, 3, '#3a7ab8'); R(52, 46, 6, 3, '#3a7ab8');
+      for (const [bx, by, r] of [[16, 31, 4], [24, 29, 5], [33, 31, 4], [46, 30, 4], [55, 31, 3], [40, 14, 3], [52, 8, 2], [28, 10, 2]]) { const b = Math.round(Math.sin(T * 2 + bx) * 1.5); circle(bx, by - b, r, '#f4fbff'); R(bx - r + 1, by - b - r + 1, 1, 1, '#ffffff'); }
+      R(12, 28, 7, 4, '#ffd21f'); R(16, 25, 4, 4, '#ffd21f'); R(20, 26, 2, 1, '#f57a12');
+    },
+    trash: () => {
+      sky(); R(0, 30, ART_W, 6, '#6cbf5a'); R(0, 36, ART_W, 8, '#4b4f5c'); R(0, 44, ART_W, 6, '#d8d2c4');
+      for (let x = 2; x < ART_W; x += 12) R(x, 40, 6, 1, '#ffd21f');
+      if (SCENES.trash) SCENES.trash.card(30 + Math.round(Math.sin(T * 2)), 42);
+      R(62, 34, 8, 11, '#2a6fe0'); R(61, 32, 10, 3, '#1f58b8'); circle(63, 46, 1, '#2f3240'); circle(68, 46, 1, '#2f3240');
     },
     chopper: () => {
       sky('#7cc8f8', '#b8e4ff'); cloud(4, 12); cloud(50, 30);

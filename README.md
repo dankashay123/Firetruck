@@ -58,3 +58,9 @@ Little Blue Truck uses CC0 sounds from OpenGameArt.org too:
 The Ice Cream Truck uses CC0 sounds from OpenGameArt.org:
 - Music: "Ice Cream Truck Theme (Childhood Flavors)" (`audio/ic-music.mp3`)
 - Bell: "Bell Dings/Chimes"; scoop: "Bubbles Pop"; happy nom: "80 CC0 creature SFX" (`audio/ic-*.mp3`)
+
+The Digger, Dog Bath and Garbage Truck games use CC0 sounds from OpenGameArt.org:
+- Music: "Brassy Bubbles" (digger), "Puppy playing in the garden" by Spring Spring (dog bath), "Wish Wash Bish Bash" (garbage truck)
+- Digging: "Shovel Sound", "100 CC0 SFX #2" stones, "75 CC0 breaking/falling/hit SFX" rocks, "Generator Loop" engine, "100 CC0 SFX" spring (`audio/dig-*.mp3`)
+- Bath: "Squeak Toy Sounds", "Bubble sound effects", "Bubbles Pop", "40 CC0 water/splash/slime SFX", "100 CC0 SFX #2" water loop (`audio/bath-*.mp3`)
+- Garbage: "75 CC0 breaking/falling/hit SFX", "27 Metal Audio Samples", "100 CC0 SFX #2" air brake, "100 CC0 SFX" paper (`audio/trash-*.mp3`)
