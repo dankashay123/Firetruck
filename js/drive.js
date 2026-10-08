@@ -1377,7 +1377,6 @@
     for (const s of vis) if (KIND[s.kind].front) KIND[s.kind].front(s, Math.floor(s.x - st.cam));
   }
   function drawLit() {
-    if (!P.pr) { drawSun(...orbit(Math.PI + sky.rot)); drawMoon(...orbit(sky.rot)); }
     const vis = visSegs();
     // glowing windows and lamps sit behind the road, so keep them off the vehicles
     loG.save(); loG.beginPath(); loG.rect(0, 0, W, H);

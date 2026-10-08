@@ -357,7 +357,7 @@
   function sparkleDot(x, y) { R(x, y - 1, 1, 3, '#ffd21f'); R(x - 1, y, 3, 1, '#ffd21f'); }
 
   SCENES.icecream = {
-    view: [124, 110],   // close up: the truck nearly fills the frame
+    view: (w, h) => w > h ? [124, 172] : [124, 110],   // close up; landscape keeps the lawn of fun in front
     freeTouch: true,
     layout,
     groundY: () => Y.hz,
