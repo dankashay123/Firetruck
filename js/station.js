@@ -37,12 +37,13 @@
     B.dogX = B.x - 19;
     B.hydX = B.x + B.w + 6;
     furnish();
+    if (typeof FX !== 'undefined') { FX.init(fxHooks); FX.layout(B); }
     // wide screens: life on the lawns either side (the slide and the ice cream truck move the dog and trees)
     const yd = typeof YARD !== 'undefined' ? YARD.layout(B) : null;
     B.leftTreeX = yd ? yd.leftTree : null; B.rightTreeX = yd ? yd.rightTree : null;
     if (yd) B.dogX = yd.dogX;
     // mini-game launchers: one big menu button that opens into a grid of the rest
-    const kinds = ['fire', 'amb', 'police', 'help', 'wash', 'icecream', 'dig', 'bath', 'trash', 'chopper', 'stickers', 'movies', 'drive', 'bed'];
+    const kinds = ['fire', 'amb', 'police', 'help', 'wash', 'icecream', 'dig', 'bath', 'trash', 'train', 'boat', 'builder', 'chopper', 'stickers', 'movies', 'drive', 'bed'];
     const side = B.x - L.safeL >= 100 && B.top - L.safeT < 120;
     const sp = side ? 32 : 38, r = side ? 13 : 16;
     const cols = side ? 3 : Math.max(3, Math.min(6, Math.floor((W - L.safeR - L.safeL - 8) / sp)));
@@ -228,7 +229,7 @@
     if (k === 'bed') { bed.on ? wakeUp() : bedtime(); return; }
     if (bed.on) return;
     if (!SCENES[k]) return;   // that mini-game isn't installed
-    if (['help', 'chopper', 'stickers', 'movies', 'drive', 'icecream', 'dig', 'bath', 'trash'].includes(k)) { SFX.chime(); goScene(k); return; }
+    if (['help', 'chopper', 'stickers', 'movies', 'drive', 'icecream', 'dig', 'bath', 'trash', 'train', 'boat', 'builder'].includes(k)) { SFX.chime(); goScene(k); return; }
     if (k === 'wash') { if (pendingMission) return; SFX.chime(); say(pick(V[selected].kind)); launchMission(selected, 'wash'); return; }
     if (pendingMission) return;
     SFX.bell(); bell.swing = 1.4;
@@ -265,6 +266,16 @@
     if (bed.asleep && Math.random() < dt * 0.8) zzz(B.dogX + 12, L.floorY - 10);
   }
 
+  // hooks for the alarm-bell fire drill and the storms (js/station_fx.js)
+  const fxHooks = {
+    rush() { for (const p of crew) goPole(p, true); },
+    trip(i) { const v = V[i]; if (v.state === 'parked' && !v.mission) startTrip(v); },
+    allHome: () => V.every(v => v.state === 'parked'),
+    jump() { for (const p of crew) if (p.state !== 'gone' && p.state !== 'sleep') p.hop = 0.5; dog.jump = 0.6; },
+    bed: () => bed.on,
+    pending: () => !!pendingMission,
+  };
+
   /* ---------- update ---------- */
   function update(dt) {
     menu.k += Math.sign((menu.open ? 1 : 0) - menu.k) * Math.min(Math.abs((menu.open ? 1 : 0) - menu.k), dt * 4);
@@ -272,6 +283,7 @@
     updateCrew(dt);
     updateBedtime(dt);
     YARD.update(dt, bed.on);
+    if (typeof FX !== 'undefined') FX.update(dt);
     stationMusic(!bed.on && !pendingMission);
     dog.jump = Math.max(0, dog.jump - dt);
     bell.swing = Math.max(0, bell.swing - dt);
@@ -305,6 +317,7 @@
       if (menu.k > 0.6) for (const t of pickerTiles()) if (x >= t.x && x < t.x + t.w && y >= t.y && y < t.y + t.h) { SFX.chime(); launch(t.k); return true; }
       return true;
     }
+    if (typeof FX !== 'undefined' && FX.tap(x, y)) return true;
     if (YARD.tap(x, y, bed.on)) return true;
     if (PETS.tap('station0', x, y) || PETS.tap('station0c', x, y) || PETS.tap('station1', x, y)) return true;
     const r = L.blob / 2 + 4;
@@ -424,9 +437,12 @@
     if (YARD.on && !sleepy) return;   // out playing in the yard
     if (f.i === 0) {
       const one = B.nFloors < 2;
-      PETS.draw(one ? 'station0c' : 'station0', { y: f.fy, x0: f.walk[0] + 26, x1: f.walk[1] - 6, who: one ? ['cat', 'vizsla', 'husky'] : ['vizsla', 'husky'],
+      const fx = typeof FX !== 'undefined' ? FX : {};
+      const who = (one ? ['cat', 'vizsla', 'husky'] : ['vizsla', 'husky']).filter(w => !(w === 'cat' ? fx.catHides : fx.zoom));   // hiding from the rain / doing zoomies
+      if (who.length) PETS.draw(one ? 'station0c' : 'station0', { y: f.fy, x0: f.walk[0] + 26, x1: f.walk[1] - 6, who,
         spots: sleepy ? { vizsla: { x: f.x1 - 44, pose: 'sleep' }, husky: { x: f.x1 - 70, pose: 'sleep' }, cat: { x: f.x1 - 20, pose: 'sleep' } } : null });
     } else if (f.i === 1) {
+      if (typeof FX !== 'undefined' && FX.catHides && !sleepy) return;   // she's under the fire truck
       const pose = sleepy || Math.floor(T / 18) % 3 ? 'sleep' : 'sit';
       PETS.draw('station1', { y: f.fy - 29, x0: f.bunk + 14, x1: f.bunk + 22, who: ['cat'], spots: { cat: { x: f.bunk + 17, pose } } });
     }
@@ -562,6 +578,7 @@
       if (p.state === 'slide') pose = 'slide';
       const draw = () => drawPerson({ type: p.type, x: p.x, yb, dir: p.dir, pose, walk: p.state === 'walk' || p.state === 'exit', skin: p.skin, hair: p.hair, seed: p.seed, hop });
       if (p.appear) alpha(1 - p.appear / 0.6, draw); else draw();
+      if (p.state === 'exit' && typeof FX !== 'undefined') FX.umbrella(p.x, yb - hop, personH(p.type), p.seed);
       if (p.state === 'sit' && p.seat.kind === 'paddle') { const px = Math.round(p.x + p.dir * 7), swing = Math.floor(T * 2.8 + (p.dir > 0 ? 0 : 1)) % 2; circle(px, yb - 11 - swing * 2, 2, '#e8222b'); R(px - p.dir * 2, yb - 9 - swing * 2, 1, 2, '#8a5a3a'); }
     }
   }
@@ -732,8 +749,8 @@
     }
   }
   /* ---------- the game picker: a full-screen page of big picture tiles ---------- */
-  const LABEL = { fire: 'FIRE', amb: 'AMBULANCE', police: 'POLICE', help: 'WHO HELPS?', wash: 'CAR WASH', icecream: 'ICE CREAM', dig: 'DIGGER', bath: 'DOG BATH', trash: 'GARBAGE', chopper: 'HELICOPTER', stickers: 'STICKERS', movies: 'MOVIES', drive: 'DRIVE', bed: 'BEDTIME' };
-  const TILE_BG = { fire: '#ffd9d4', amb: '#e8f0fa', police: '#d6e4ff', help: '#d9f2d4', wash: '#d4f1fa', icecream: '#ffe0ec', dig: '#ffe9b8', bath: '#d4ecff', trash: '#dcf4d4', chopper: '#dff1ff', stickers: '#ffdcef', movies: '#e6d9f2', drive: '#ffe6cc', bed: '#e2d6f5' };
+  const LABEL = { fire: 'FIRE', amb: 'AMBULANCE', police: 'POLICE', help: 'WHO HELPS?', wash: 'CAR WASH', icecream: 'ICE CREAM', dig: 'DIGGER', bath: 'DOG BATH', trash: 'GARBAGE', train: 'TRAIN', boat: 'BOAT', builder: 'BUILD', chopper: 'HELICOPTER', stickers: 'STICKERS', movies: 'MOVIES', drive: 'DRIVE', bed: 'BEDTIME' };
+  const TILE_BG = { fire: '#ffd9d4', amb: '#e8f0fa', police: '#d6e4ff', help: '#d9f2d4', wash: '#d4f1fa', icecream: '#ffe0ec', dig: '#ffe9b8', bath: '#d4ecff', trash: '#dcf4d4', train: '#fff0c8', boat: '#d2ecfb', builder: '#f2e2c4', chopper: '#dff1ff', stickers: '#ffdcef', movies: '#e6d9f2', drive: '#ffe6cc', bed: '#e2d6f5' };
   /* little picture cards for the picker, drawn with the game's own sprites at its own pixel size */
   const ART_W = 72, ART_H = 50;
   let artCv = null;
@@ -784,6 +801,24 @@
       for (let x = 2; x < ART_W; x += 12) R(x, 40, 6, 1, '#ffd21f');
       if (SCENES.trash) SCENES.trash.card(30 + Math.round(Math.sin(T * 2)), 42);
       R(62, 34, 8, 11, '#2a6fe0'); R(61, 32, 10, 3, '#1f58b8'); circle(63, 46, 1, '#2f3240'); circle(68, 46, 1, '#2f3240');
+    },
+    train: () => {
+      sky(); cloud(46, 8); grass(42);
+      R(0, 42, ART_W, 3, '#a89c88'); for (let x = 1; x < ART_W; x += 5) R(x, 42, 2, 2, '#6a4a2a'); R(0, 41, ART_W, 1, '#cfd6dd');
+      for (let i = 0; i < 4; i++) { const k = (T * 0.8 + i * 0.25) % 1; circle(52 - i * 9 - k * 6, 8 - i + Math.round(-k * 4), 2 + i, '#f4f7fb'); }
+      if (SCENES.train) SCENES.train.card(-4, 42);
+    },
+    builder: () => {
+      R(0, 0, ART_W, ART_H, '#e8d8b8'); R(4, 4, ART_W - 8, 14, '#c8a26a');
+      for (let y = 7; y < 16; y += 4) for (let x = 7; x < ART_W - 6; x += 4) R(x, y, 1, 1, '#9a7442');
+      R(10, 6, 2, 9, '#9aa3ad'); R(8, 6, 6, 2, '#9aa3ad'); R(22, 8, 2, 8, '#a8743f'); R(20, 6, 6, 3, '#5a5f6e'); R(56, 6, 2, 9, '#e8222b');
+      R(0, 44, ART_W, 6, '#9aa3ad'); for (let x = 2; x < ART_W - 2; x += 6) { R(x, 43, 3, 2, '#ffd21f'); R(x + 3, 43, 3, 2, '#2f3240'); }
+      if (SCENES.builder) SCENES.builder.card(3, 43 - Math.round(Math.abs(Math.sin(T * 3))));
+    },
+    boat: () => {
+      sky(); R(0, 30, ART_W, 20, '#3a94d4'); R(0, 30, ART_W, 1, '#d8f2fc');
+      for (let x = 0; x < ART_W; x += 6) R(x + Math.round(Math.sin(T * 2 + x)), 33 + (x % 4) * 3, 3, 1, '#8fd3f4');
+      if (SCENES.boat) SCENES.boat.card(34, 45 + Math.round(Math.sin(T * 3)));
     },
     chopper: () => {
       sky('#7cc8f8', '#b8e4ff'); cloud(4, 12); cloud(50, 30);
@@ -908,7 +943,7 @@
       }
       for (const p of crew) if (p.state === 'gone') p.t = Math.min(p.t, rand(0.5, 3));
     },
-    leave() { stationMusic(false); },
+    leave() { stationMusic(false); if (typeof FX !== 'undefined') FX.leave(); },
     update,
     tap,
     drawWorld() {
@@ -916,13 +951,17 @@
       drawHills(L.hillY, L.floorY);
       drawTrees();
       drawBuilding();
+      if (typeof FX !== 'undefined') FX.drawBell();
       YARD.drawBack(bed.on);
       if (bed.asleep) for (const f of B.floors) { drawRoom(f, false); drawCrew(f.i); stationPets(f); alpha(0.35, () => R(f.x0, f.top, f.x1 - f.x0, f.fy - f.top + 2, '#0b1030')); }
       drawRoad();
+      if (typeof FX !== 'undefined') FX.drawPuddles();
       drawProps();
       V.forEach((v, i) => { if (v.state === 'parked') drawVehicle(v, i); });
+      if (typeof FX !== 'undefined') FX.drawCatUnderTruck();
       drawDoors();
       YARD.drawFront(bed.on);
+      if (typeof FX !== 'undefined') FX.drawZoomies();
       drawSnowCaps();
       V.forEach((v, i) => { if (v.state !== 'parked') drawVehicle(v, i); });
     },
@@ -932,6 +971,7 @@
       if (!bed.asleep) for (const f of B.floors) { drawRoom(f, true); drawCrew(f.i); stationPets(f); }
       drawCrew('down');
       drawParticles();
+      if (typeof FX !== 'undefined') { FX.drawLit(); FX.drawFlash(); }
     },
     drawUI() {
       drawPalette();

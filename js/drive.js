@@ -1215,7 +1215,7 @@
   }
 
   /* ---------- scene hooks ---------- */
-  function enter() {
+  function enter(arg) {
     stopSirenNow();
     Object.assign(st, { phase: 'pick', t: 0, cam: 0, v: 0, lane: 1, ly: 1, rot: 0, enterT: 0, siren: false, idle: 0, hornT: 0, laneT: 0, wheelA: 0,
       segs: [], nextX: -40, deck: [], sdeck: [], since: 0, every: 2, lastKind: '', lastCity: false, lastLight: 120, lastSpecial: '',
@@ -1225,6 +1225,9 @@
     gen();
     for (let i = 0; i < 3; i++) st.peds.push(newPed(rand(20, W - 20)));
     setClouds(L.safeT + 10, Math.max(L.safeT + 30, P.skyTop - 12));
+    // straight from the workshop: drive the fire truck you just built
+    st.custom = arg && arg.custom && SCENES.builder ? arg.custom : null;
+    if (st.custom) choose(VI.fire);
   }
   function leave() {
     stopSirenNow(); st.siren = false; st.hold.clear(); st.swipes = {};
@@ -1309,7 +1312,8 @@
   function drawPlayer(yb) {
     const x = Math.floor(pxNow() / 2), moving = st.phase === 'enter' || st.v > 15;
     const bob = moving && Math.floor(T * 9) % 2 ? -1 : 0;
-    drawV(st.vi, x, Math.round(yb), st.siren, bob, st.rot);
+    if (st.custom) SCENES.builder.drawTruck(st.custom, x, Math.round(yb), st.siren, bob, st.rot);
+    else drawV(st.vi, x, Math.round(yb), st.siren, bob, st.rot);
     if (weather.kind === 'rain' && weather.k > 0.3) {
       const v = V[st.vi], [wx, wy, len] = WIPE[v.kind], top = Math.round(yb) - v.h + bob;
       const a = -Math.PI / 2 + Math.sin(T * 6) * 1.1;

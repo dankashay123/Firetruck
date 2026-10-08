@@ -70,3 +70,17 @@ The family cat's meows and purr are CC0 from OpenGameArt.org: "Meow" by Crystal 
 Sprinkles and the Ice Cream Mountain (cartoon) and the station's background music use CC0 sounds from OpenGameArt.org:
 - Station music: "Quaint Town" (`audio/station-music.mp3`)
 - Chime: "Bell Dings/Chimes"; plop: "Wet squish slurp impacts" (`audio/mv-*.mp3`); the cartoon's tune is "Childhood Flavors" (`audio/ic-music.mp3`)
+
+The Choo Choo Train game uses CC0 sounds from OpenGameArt.org: music "The Rainbow Train" by Spring Spring (`audio/train-music.mp3`); "Steam whistle" (`audio/train-whistle*.mp3`); "Steam release sounds" (`audio/train-hiss.mp3`); "Steamboat Engine Sound" (`audio/train-chug.mp3`). The farm animals reuse the Little Blue Truck sounds.
+
+Fireboat Rescue uses CC0 sounds from OpenGameArt.org: music "A sailor's chant" by Thimras (`audio/boat-music.mp3`); "Steam whistle" pitched down for the horn (`audio/boat-horn.mp3`, `audio/boat-toot.mp3`); "Steamboat Engine Sound" (`audio/boat-motor.mp3`); "Beach Ocean Waves" (`audio/boat-waves.mp3`); "Solo Seagull Sound Effects" (`audio/boat-gull*.mp3`); "Steam release sounds" (`audio/boat-steam.mp3`).
+
+Build a Fire Truck uses CC0 sounds from OpenGameArt.org: music "Happy Clappy Loop" (`audio/bd-music.mp3`); hammer, clunk, tools and spring from "100 CC0 metal and wood SFX" (`audio/bd-*.mp3`).
+
+The station's thunderstorms use CC0 sounds from OpenGameArt.org: thunder from "100 CC0 SFX #2" (`audio/wx-thunder.mp3`) and "Rain (loopable)" (`audio/wx-rain.mp3`). The alarm bell is synthesized.
+
+The Cat Who Got Stuck in a Tree (cartoon) uses CC0 sounds from OpenGameArt.org: music "Catsong" by josepharaoh99 (`audio/mc-music.mp3`); "Sirens and Alarm Noise" (`audio/mc-siren.mp3`); "Tree Creaking" (`audio/mc-creak.mp3`); "100 CC0 metal and wood SFX" (`audio/mc-ratchet.mp3`); harp from "Magic Words / Healing Sound Effect" by Spring Spring (`audio/mc-twinkle.mp3`); "Swishes Sound Pack" (`audio/mc-swish.mp3`).
+
+The Dogs' Big Bath Day (cartoon) uses CC0 sounds from OpenGameArt.org: music "Children's March Theme" by Cleyton Kauffman (`audio/bathday-music.mp3`); mud from "25 CC0 mud sfx" (`audio/bathday-splat.mp3`, `audio/bathday-squish.mp3`); towel "Fabric Rustling" (`audio/bathday-rub.mp3`).
+
+Goodnight, Fire Station (cartoon) uses CC0 sounds from OpenGameArt.org: music box "cute tune" from "4 Music Box Tracks" (`audio/night-music.mp3`); "Crickets Ambient Noise (Loopable)" by Ted Kerr (`audio/night-crickets.mp3`); harp from "Magic Words / Healing Sound Effect" by Spring Spring (`audio/night-harp.mp3`).

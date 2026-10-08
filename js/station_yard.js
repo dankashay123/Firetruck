@@ -274,6 +274,7 @@ const YARD = (() => {
     else if (p.state === 'idle') pose = Math.floor(T * 0.8 + p.seed) % 3 ? 'stand' : 'wave';
     const draw = () => drawPerson({ type: p.type, x: p.x, yb: G.y, dir: p.dir, pose, walk: walking, skin: p.skin, seed: p.seed, hop: p.hop });
     if (p.appear > 0) alpha(1 - p.appear / 0.5, draw); else draw();
+    if (typeof FX !== 'undefined') FX.umbrella(p.x, G.y - (p.hop || 0), personH(p.type), p.seed);
     if (p.treat >= 0 && p.state === 'eat') {
       const o = OUTFITS[p.type], child = o && o.child, ph = Math.floor(T * 5 + p.seed) % 2;
       cone(p.treat, p.x + p.dir * (ph ? 2 : 5), G.y - (child ? 8 : 10) - (ph ? 3 : 0));
@@ -288,6 +289,7 @@ const YARD = (() => {
     }
     if (w.kind === 'jog') drawPerson({ type: w.type, x: w.x, yb, dir: w.dir, pose: w.wave > 0 ? 'wave' : 'cheer', walk: true, skin: w.skin, seed: w.seed, hop: Math.abs(Math.sin(T * 12 + w.seed)) * 2 + w.hop });
     else drawPerson({ type: w.type, x: w.x, yb, dir: w.dir, pose, walk: true, skin: w.skin, seed: w.seed, hop: w.hop });
+    if (typeof FX !== 'undefined') FX.umbrella(w.x, yb - (w.hop || 0), personH(w.type), w.seed);
   }
   function kids() {
     if (!G.kids) return;
@@ -306,6 +308,7 @@ const YARD = (() => {
     if (b.state === 'peck') { R(x - 1, y, 1, 1, '#e8a040'); R(x + 1, y, 1, 1, '#e8a040'); }
   }
   function drawCat() {
+    if (typeof FX !== 'undefined' && FX.catHides) return;   // under the fire truck, out of the rain
     const y = G.y;
     if (cat.state === 'nap') PETS.catSleep(cat.x, y, cat.dir);
     else if (cat.state === 'stalk') PETS.catWalk(cat.x, y + 1, cat.dir, { walk: Math.floor(T * 2) % 2 === 0 });
@@ -313,6 +316,7 @@ const YARD = (() => {
     else PETS.catSit(cat.x, y, { hop: cat.hop, meow: cat.react > 0, swish: true });
   }
   function drawDog(d) {
+    if (typeof FX !== 'undefined' && FX.zoom) return;   // off doing zoomies in front of the station
     const D = SCENES.icecream && SCENES.icecream._dogs;
     if (d.state === 'nap') (d.who === 'husky' ? PETS.huskyLie : PETS.vizslaLie)(d.x, G.y, d.dir, { sleep: true });
     else if (D) {
@@ -361,7 +365,7 @@ const YARD = (() => {
     const near = (px, h, w = 8) => Math.abs(x - px) < w && y > G.y - h && y < G.y + 5;
     if (!sleeping) {
       for (const d of dogs) if (near(d.x, 18, 12)) { d.hop = 6; d.react = 0.5; if (d.state === 'nap') d.state = 'play'; PETS.SND.load(); PETS.SND.play(d.who === 'husky' ? 'bark2' : 'bark'); hearts(d.x, G.y - 20); return true; }
-      if (near(cat.x, 18)) { cat.hop = 4; cat.react = 0.5; PETS.SND.load(); PETS.SND.play(cat.state === 'nap' ? 'purr' : 'meow'); hearts(cat.x, G.y - 20); return true; }
+      if (near(cat.x, 18) && !(typeof FX !== 'undefined' && FX.catHides)) { cat.hop = 4; cat.react = 0.5; PETS.SND.load(); PETS.SND.play(cat.state === 'nap' ? 'purr' : 'meow'); hearts(cat.x, G.y - 20); return true; }
       for (const b of st.birds) if (Math.abs(x - b.x) < 8 && Math.abs(y - (G.y - 3 - b.h)) < 8) { scare(b.x, 24); return true; }
       if (G.kids && x > G.kids[0] - 10 && x < G.kids[1] + 10 && y > G.y - 70 && y < G.y + 4) { st.kids.high = 2.4; st.kids.cheer = 1.4; [880, 988, 1175].forEach((f, i) => tone('sine', f, i * 0.08, 0.12, 0.07)); return true; }
       for (const p of st.people) if (p.state !== 'slide' && near(p.x, 24)) { p.hop = 6; SFX.boop(1.2); return true; }
