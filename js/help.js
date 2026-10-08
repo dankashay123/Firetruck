@@ -653,7 +653,7 @@
   SC[5].cast = [castPerson('kid3', SKIN[2]), castDog('#f4f7fb', '#8a5a2a'), castPerson('cop')];
 
   SCENES.help = {
-    view: [186, 200],
+    view: (w, h) => w > h * 1.8 ? [186, 150] : [186, 200],   // landscape zooms in closer
     groundY: () => Y.hillY,
     layout() {
       const uw = W - L.safeL - L.safeR, gap = 6;

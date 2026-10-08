@@ -129,37 +129,44 @@
   function layout() {
     const wide = W > H * 1.2, s = L.blob;
     Y.wide = wide;
-    Y.back = { x: L.safeL + 4, y: L.safeT + 4, s };
+    // wide screens: the buttons stack down the left so the machines can sit at the very top and the treat grows
+    const col = (i, sz) => ({ x: L.safeL + 4, y: L.safeT + 4 + i * (s + 8), s: sz });
+    Y.back = col(0, s);
     Y.tabs = wide
-      ? [{ m: 'swirl', x: L.safeL + 4 + s + 8, y: L.safeT + 4, s }, { m: 'scoop', x: L.safeL + 4 + 2 * (s + 8), y: L.safeT + 4, s }]
+      ? [{ m: 'swirl', ...col(1, s) }, { m: 'scoop', ...col(2, s) }]
       : [{ m: 'swirl', x: W - L.safeR - 4 - 2 * s - 8, y: L.safeT + 4, s }, { m: 'scoop', x: W - L.safeR - 4 - s, y: L.safeT + 4, s }];
     // toppings: a row along the bottom, or a column down the right side on wide screens
     const r = Math.max(11, Math.min(16, Math.floor(s * 0.62)));
     Y.tops = TOPS.map((t, i) => wide
       ? { t, x: W - L.safeR - r - 6, y: Math.round(lerp(L.safeT + r + 6, H - L.safeB - r - 6, i / 4)), r }
       : { t, x: Math.round(lerp(L.safeL + r + 8, W - L.safeR - r - 8, i / 4)), y: H - L.safeB - r - 8, r });
-    const rx0 = L.safeL + 4, rx1 = wide ? W - L.safeR - 2 * r - 16 : W - L.safeR - 4;
-    Y.row = { x0: rx0, x1: rx1, y: L.safeT + s + 12 };
+    const rx0 = wide ? L.safeL + s + 14 : L.safeL + 4, rx1 = wide ? W - L.safeR - 2 * r - 16 : W - L.safeR - 4;
+    Y.row = { x0: rx0, x1: rx1, y: wide ? L.safeT + 6 : L.safeT + s + 12 };
+    // the treat sits on the counter
+    Y.yb = wide ? H - L.safeB - 6 : Y.tops[0].y - r - 12;
     // the machines sit on a sliding shelf: the chosen one glides over the treat, which stays in the middle
-    const mw = Math.max(40, Math.min(58, Math.floor((rx1 - rx0) / (wide ? 4 : 3.2))));
+    let mw = Math.max(40, Math.min(58, Math.floor((rx1 - rx0) / (wide ? 4 : 3.2))));
+    if (wide) {   // shrink the machines a little if that lets the treat grow a size
+      const kk = Math.min(4, Math.floor((Y.yb - Y.row.y - 48) / 48));
+      mw = Math.max(40, Math.min(mw, Y.yb - Y.row.y - 8 - 48 * kk));
+    }
     Y.mw = mw;
     Y.mach = SWIRLS.map((_, i) => ({ i, bx: i * mw, x: 0, y: Y.row.y, w: mw - 6, h: Math.min(54, Math.round(mw * 1.0)) }));
     const tw = Math.min(40, Math.floor((rx1 - rx0) / 6));
     Y.tubs = SCOOPS.map((_, i) => ({ i, x: Math.round(lerp(rx0, rx1 - tw, i / 5)), y: Y.row.y + 6, w: tw - 3, h: Math.round(tw * 0.75) }));
-    // the treat sits on the counter
-    Y.yb = wide ? H - L.safeB - 6 : Y.tops[0].y - r - 12;
     const room = Y.yb - (Y.row.y + Y.mach[0].h + 8);
     Y.k = Math.max(1, Math.min(4, Math.floor(room / 48), Math.floor((Y.wide ? (W - L.safeR - L.safeL) * 0.4 : W * 0.8) / 24)));   // the treat as big as the space allows
-    Y.serve = wide ? { x: rx1 - s - 8, y: L.safeT + 4, s: s + 4 } : { x: Math.round(W / 2 - (s + 4) / 2), y: L.safeT + 2, s: s + 4 };   // the serve bell lives in the top bar
+    Y.serve = wide ? col(3, s + 4) : { x: Math.round(W / 2 - (s + 4) / 2), y: L.safeT + 2, s: s + 4 };   // the serve bell
     Y.cxScoop = Math.round((rx0 + rx1) / 2);
   }
 
   /* ---------- state ---------- */
-  const st = { shelf: 0, bounce: 0, mode: 'swirl', mach: 1, cx: 0, hold: null, pour: 0, flies: [], serveOut: 0, slideIn: 0, wob: 0, full: 0, made: 0 };
+  const st = { shelf: 0, lift: 0, bounce: 0, mode: 'swirl', mach: 1, cx: 0, hold: null, pour: 0, flies: [], serveOut: 0, slideIn: 0, wob: 0, full: 0, made: 0 };
   let whirr = null;
   const nozzleX = i => Y.mach[i].x + Math.round(Y.mach[i].w / 2);
   const shelfTarget = () => Y.cxScoop - (Y.mach[st.mach].bx + Math.round(Y.mach[st.mach].w / 2));
-  function placeMachines() { for (const m of Y.mach) m.x = Math.round(m.bx + st.shelf); }
+  function placeMachines() { for (const m of Y.mach) { m.x = Math.round(m.bx + st.shelf); m.y = Y.row.y - Math.round(st.lift * (Y.row.y + m.h + 14)); } }
+  const topped = () => Object.keys(B.tops).length > 0 || B.sprinkles.length > 0 || B.stars.length > 0;
   const nozzleY = i => Y.mach[i].y + Y.mach[i].h + 4;
   function targetX() { return Y.cxScoop; }
   function treatTopScreen() { const [ty] = topSurface(); return Y.yb + ty * Y.k; }
@@ -198,11 +205,14 @@
     st.wob = Math.max(0, st.wob - dt * 2);
     // slide the treat under the right machine
     if (!st.serveOut) st.cx += (targetX() - st.cx) * Math.min(1, dt * 7);
+    // once toppings go on, the machines lift up out of the way so a tall treat has room
+    const lt = topped() && st.hold == null ? 1 : 0;
+    st.lift = lt > st.lift ? Math.min(lt, st.lift + dt * 2.5) : Math.max(lt, st.lift - dt * 4);
     st.shelf += (shelfTarget() - st.shelf) * Math.min(1, dt * 7); placeMachines();
     st.bounce = Math.max(0, st.bounce - dt * 3);
     if (st.slideIn > 0) st.slideIn = Math.max(0, st.slideIn - dt * 1.8);
     // pouring soft serve while a finger is down
-    const near = Math.abs(st.shelf - shelfTarget()) < 3 && !st.serveOut && st.slideIn === 0;
+    const near = Math.abs(st.shelf - shelfTarget()) < 3 && st.lift < 0.05 && !st.serveOut && st.slideIn === 0;
     const pouring = st.mode === 'swirl' && st.hold != null && near && B.amount < 1.15;
     st.pour += ((pouring ? 1 : 0) - st.pour) * Math.min(1, dt * 12);
     if (pouring) {
@@ -299,7 +309,7 @@
     groundY: () => 0,
     enter() {
       layout(); newBuild();
-      Object.assign(st, { mode: 'swirl', mach: Math.floor(Math.random() * SWIRLS.length), hold: null, pour: 0, flies: [], serveOut: 0, slideIn: 1, wob: 0 });
+      Object.assign(st, { mode: 'swirl', mach: Math.floor(Math.random() * SWIRLS.length), hold: null, pour: 0, flies: [], serveOut: 0, slideIn: 1, wob: 0, lift: 0 });
       st.cx = targetX(); st.shelf = shelfTarget(); placeMachines();
       const a = audio(); if (a) a.startMusic();
       SCENES.icecream._keepMusic = false;
@@ -310,7 +320,9 @@
     drawKitchen() {
       wall();
       if (st.mode === 'swirl') {
+        g.save(); g.beginPath(); g.rect(Y.row.x0 - 4, 0, Y.row.x1 - Y.row.x0 + 8, H); g.clip();   // the shelf window
         Y.mach.forEach(m => machine(m, m.i === st.mach));
+        g.restore();
         if (st.pour > 0.05) {   // the stream of soft serve
           const c = SWIRLS[st.mach], nx = nozzleX(st.mach), y0 = nozzleY(st.mach), y1 = treatTopScreen(), wv = Math.max(2, Math.round(3 * st.pour * Y.k));
           R(nx - Math.floor(wv / 2), y0, wv, Math.max(0, y1 - y0), c[0]); R(nx - Math.floor(wv / 2), y0, 1, Math.max(0, y1 - y0), c[2]);
@@ -355,7 +367,7 @@
         for (const t of Y.tubs) if (x >= t.x - 2 && x < t.x + t.w + 2 && y >= t.y - 6 && y < t.y + t.h + 4) { addScoop(t.i); return true; }
         return true;
       }
-      for (const m of Y.mach) if (x >= m.x - 2 && x < m.x + m.w + 2 && y >= m.y - 4 && y < m.y + m.h + 6) {
+      if (x >= Y.row.x0 - 4 && x < Y.row.x1 + 4) for (const m of Y.mach) if (x >= m.x - 2 && x < m.x + m.w + 2 && y >= m.y - 4 && y < m.y + m.h + 6) {
         if (st.mach !== m.i) { st.mach = m.i; play('pop', 1.2); }
         break;
       }

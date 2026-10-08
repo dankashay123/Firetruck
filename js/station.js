@@ -22,9 +22,9 @@
     B.signTop = B.bayTop - 22;
     // Upper floors grow to fill the screen up to about the middle when there's room.
     const maxAvail = B.signTop - 34 - L.safeT;
-    const desired = B.signTop - 30 - H * 0.38;
+    const desired = B.signTop - 30 - H * 0.3;
     const avail = desired >= 40 ? Math.min(maxAvail, desired) : Math.max(34, Math.min(maxAvail, 56));
-    B.nFloors = avail >= 116 ? 2 : 1;
+    B.nFloors = avail >= 210 ? 3 : avail >= 116 ? 2 : 1;   // tall screens get a games room up top
     B.floorH = Math.min(78, Math.floor(avail / B.nFloors));
     B.top = B.signTop - B.nFloors * B.floorH;
     B.floors = [];
@@ -72,6 +72,12 @@
         f.table = Math.round(f.x0 + w * 0.38); f.tw = 46;
         seats.push({ f: 0, x: f.table - 8, dir: 1, kind: 'chair', who: null });
         seats.push({ f: 0, x: f.table + f.tw + 8, dir: -1, kind: 'chair', who: null });
+      } else if (f.i === 2) {                   // games room: ping-pong, a hoop, a beanbag
+        f.pp = Math.round(f.x0 + w * 0.42); f.ppw = 44;
+        seats.push({ f: 2, x: f.pp - 7, dir: 1, kind: 'paddle', who: null });
+        seats.push({ f: 2, x: f.pp + f.ppw + 7, dir: -1, kind: 'paddle', who: null });
+        f.bean = f.x1 - 30;
+        seats.push({ f: 2, x: f.bean, dir: -1, kind: 'couch', who: null });
       } else {                                  // bunk room: bunks, lockers, couch and TV
         f.bunk = f.x0 + 38; f.locker = f.x0 + 84; f.couch = f.x1 - 82;
         seats.push({ f: 1, x: f.couch + 11, dir: 1, kind: 'couch', who: null });
@@ -83,6 +89,7 @@
   function hireCrew() {
     const roster = [['ff', 0], ['ff', 0], ['cop', 0], ['medic', 0]];
     if (B.nFloors > 1) roster.push(['ff', 1, true], ['medic', 1], ['cop', 1]);
+    if (B.nFloors > 2) roster.push(['ff', 2], ['medic', 2], ['cop', 2]);
     crew = roster.map(([type, f, sleeper], i) => {
       const fl = B.floors[f];
       const p = { type, f, home: f, sleeper: !!sleeper, x: rand(fl.walk[0] + 10, fl.walk[1] - 10), y: fl.fy, dir: Math.random() < 0.5 ? 1 : -1,
@@ -402,7 +409,7 @@
     R(f.x0, f.fy - 10, w, 10, wain); R(f.x0, f.fy - 11, w, 1, '#cdb184');
     R(f.x0, f.fy, w, 2, '#8a5a3a');
     // back-wall window with the real sky
-    const wx = f.i === 0 ? f.table + f.tw + 16 : f.locker + 34, wy = f.top + 8, ww = 22, wh = Math.min(16, h - 26);
+    const wx = f.i === 0 ? f.table + f.tw + 16 : f.i === 2 ? f.x1 - 64 : f.locker + 34, wy = f.top + 8, ww = 22, wh = Math.min(16, h - 26);
     if (wh > 6) {
       R(wx - 1, wy - 1, ww + 2, wh + 2, '#ffffff');
       R(wx, wy, ww, wh, mix('#8fd6ff', '#141a45', nightK()));
@@ -419,7 +426,7 @@
     const lx = f.x0 + Math.round(w * 0.55);
     R(lx, f.top, 1, 4, '#5a5f6e'); R(lx - 3, f.top + 4, 7, 2, lightsOn ? '#ffe873' : '#8a8466');
     if (lightsOn) alpha(0.25, () => circle(lx, f.top + 8, 9, '#fff3a6'));
-    if (f.i === 0) drawKitchen(f, lightsOn); else drawBunkRoom(f, lightsOn);
+    if (f.i === 0) drawKitchen(f, lightsOn); else if (f.i === 2) drawGamesRoom(f, lightsOn); else drawBunkRoom(f, lightsOn);
   }
   function drawKitchen(f) {
     const tx = f.table, tw = f.tw, fy = f.fy, h = f.fy - f.top;
@@ -446,6 +453,32 @@
     const fh = Math.min(34, h - 4);
     R(f.x1 - 22, fy - fh, 17, fh, '#e9eef2'); R(f.x1 - 22, fy - fh + 12, 17, 1, '#b4bec8'); R(f.x1 - 20, fy - fh + 4, 1, 5, '#7d8290'); R(f.x1 - 20, fy - fh + 15, 1, 6, '#7d8290');
     if (h > 52) { R(kx, f.top + 6, 42, 10, '#b07a4a'); R(kx + 20, f.top + 6, 1, 10, '#8a5a3a'); R(kx + 8, f.top + 13, 3, 1, '#e9eef2'); R(kx + 30, f.top + 13, 3, 1, '#e9eef2'); }
+  }
+  function drawGamesRoom(f) {
+    const fy = f.fy, tx = f.pp, tw = f.ppw;
+    // a basketball hoop on the wall, with a ball that drops through now and then
+    const hx = f.x0 + 34, hy = f.top + 10;
+    R(hx - 6, hy, 13, 9, '#ffffff'); R(hx - 5, hy + 1, 11, 7, '#f4f7fb'); R(hx - 2, hy + 3, 5, 3, '#e8222b'); R(hx - 1, hy + 4, 3, 1, '#f4f7fb');
+    R(hx - 4, hy + 9, 9, 1, '#f57a12'); for (let k = 0; k < 4; k++) R(hx - 3 + k * 2, hy + 10, 1, 4, '#ffffff');
+    const ph = (T * 0.45) % 1;
+    if (ph < 0.35) { const k = ph / 0.35; circle(hx, Math.round(hy - 4 + k * (fy - hy - 2)), 2, '#f57a12'); }
+    else circle(hx + 8, fy - 2, 2, '#f57a12');
+    // a pennant and a bookshelf
+    R(f.x0 + 52, f.top + 8, 1, 10, '#8a5a3a'); for (let k = 0; k < 6; k++) R(f.x0 + 53, f.top + 8 + k, 10 - k * 1.6, 1, '#e8222b');
+    const bx = f.x1 - 50;
+    R(bx, fy - 26, 14, 26, '#a8743f'); R(bx + 1, fy - 25, 12, 24, '#7a4a2a');
+    for (let r = 0; r < 3; r++) { R(bx + 1, fy - 17 + r * 8, 12, 1, '#a8743f'); for (let k = 0; k < 5; k++) R(bx + 2 + k * 2, fy - 24 + r * 8, 2, 6 - (k % 2), ['#e8222b', '#2a6fe0', '#ffd21f', '#3fb43a', '#ff6fb4'][(k + r) % 5]); }
+    // a beanbag
+    circle(f.bean, fy - 6, 6, '#8a4fd9'); R(f.bean - 7, fy - 5, 15, 5, '#8a4fd9'); R(f.bean - 7, fy - 1, 15, 1, '#6a34b0'); R(f.bean - 3, fy - 10, 3, 2, '#b48ae8');
+    // the ping-pong table, and a ball flying back and forth while two people play
+    R(tx, fy - 13, tw, 3, '#2a8a4a'); R(tx, fy - 13, tw, 1, '#3fb46a'); R(tx + 1, fy - 12, tw - 2, 1, '#ffffff');
+    R(tx + Math.floor(tw / 2) - 1, fy - 17, 2, 4, '#ffffff'); R(tx + 2, fy - 10, 2, 10, '#3a3d46'); R(tx + tw - 4, fy - 10, 2, 10, '#3a3d46');
+    const players = seats.filter(s => s.f === 2 && s.kind === 'paddle' && s.who && s.who.state === 'sit').length;
+    if (players === 2) {
+      const k = (T * 1.4) % 2, dir = k < 1 ? 1 : -1, u = k < 1 ? k : 2 - k;
+      const bxp = tx - 2 + u * (tw + 4), byp = fy - 15 - Math.abs(Math.sin(u * Math.PI * 2)) * 9;
+      R(Math.round(bxp), Math.round(byp), 2, 2, '#ffffff');
+    } else R(tx + 8, fy - 15, 2, 2, '#ffffff');
   }
   function drawBunkRoom(f) {
     const fy = f.fy, bx = f.bunk;
@@ -491,11 +524,13 @@
       if (!sliding && onFloor !== f.i) continue;
       const hop = p.hop > 0 ? Math.sin(p.hop / 0.5 * Math.PI) * 5 : 0;
       let pose = p.wave > 0 ? 'wave' : 'stand', yb = p.y;
-      if (p.state === 'sit') { pose = p.wave > 0 ? 'wave' : (p.seat.kind === 'chair' ? 'eat' : 'sit'); yb = f.fy - 8; }
+      if (p.state === 'sit' && p.seat.kind === 'paddle') { pose = 'carry'; yb = p.y; }
+      else if (p.state === 'sit') { pose = p.wave > 0 ? 'wave' : (p.seat.kind === 'chair' ? 'eat' : 'sit'); yb = f.fy - 8; }
       if (p.state === 'sit' && pose === 'wave') pose = 'sit';
       if (p.state === 'slide') pose = 'slide';
       const draw = () => drawPerson({ type: p.type, x: p.x, yb, dir: p.dir, pose, walk: p.state === 'walk' || p.state === 'exit', skin: p.skin, hair: p.hair, seed: p.seed, hop });
       if (p.appear) alpha(1 - p.appear / 0.6, draw); else draw();
+      if (p.state === 'sit' && p.seat.kind === 'paddle') { const px = Math.round(p.x + p.dir * 7), swing = Math.floor(T * 2.8 + (p.dir > 0 ? 0 : 1)) % 2; circle(px, yb - 11 - swing * 2, 2, '#e8222b'); R(px - p.dir * 2, yb - 9 - swing * 2, 1, 2, '#8a5a3a'); }
     }
   }
 
