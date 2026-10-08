@@ -176,7 +176,7 @@
         const x = binX(seg, i);
         if (x < st.cam - 20 || x > st.cam + W + 20) continue;
         const arm = st.truck.arm;
-        if (arm && arm.seg === seg && arm.i === i) continue;   // the arm has this one
+        if (arm && arm.seg === seg && arm.i === i && armPose(arm).has) continue;   // the arm is holding this one
         const empty = st.done[key(seg, i)], kind = binKind(seg, i);
         // a raccoon peeks out of some of the old metal cans
         const peek = !empty && raccoonIn(seg, i) && (Math.sin(T * 1.3 + i) > 0.55);

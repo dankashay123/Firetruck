@@ -890,7 +890,7 @@ function layout() {
   const skyH = Math.max(60, L.floorY - 40);
   stars = Array.from({ length: Math.round(W * skyH / 900) }, () => ({ x: Math.random() * W | 0, y: Math.random() * skyH | 0, p: Math.random() * 6, big: Math.random() < 0.12 }));
   heli.y = L.safeT + 12;
-  for (const s of Object.values(SCENES)) if (s.layout) s.layout();
+  for (const s of Object.values(SCENES)) if (s.layout) { try { s.layout(); } catch (e) { console.error(e); } }
 }
 function setClouds(top, bottom) {
   const span = Math.max(30, bottom - top), n = Math.max(3, Math.round(span / 60) + 2);

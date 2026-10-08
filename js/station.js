@@ -22,7 +22,7 @@
     B.signTop = B.bayTop - 22;
     // Upper floors grow to fill the screen up to about the middle when there's room.
     const maxAvail = B.signTop - 34 - L.safeT;
-    const desired = B.signTop - 30 - H * 0.3;
+    const desired = W > H ? maxAvail : B.signTop - 30 - H * 0.3;   // sideways, every floor gets shown
     const avail = desired >= 40 ? Math.min(maxAvail, desired) : Math.max(34, Math.min(maxAvail, 56));
     B.nFloors = avail >= 210 ? 3 : avail >= 116 ? 2 : 1;   // tall screens get a games room up top
     B.floorH = Math.min(78, Math.floor(avail / B.nFloors));
@@ -473,9 +473,12 @@
     const hx = f.x0 + 34, hy = f.top + 10;
     R(hx - 6, hy, 13, 9, '#ffffff'); R(hx - 5, hy + 1, 11, 7, '#f4f7fb'); R(hx - 2, hy + 3, 5, 3, '#e8222b'); R(hx - 1, hy + 4, 3, 1, '#f4f7fb');
     R(hx - 4, hy + 9, 9, 1, '#f57a12'); for (let k = 0; k < 4; k++) R(hx - 3 + k * 2, hy + 10, 1, 4, '#ffffff');
-    const ph = (T * 0.45) % 1;
-    if (ph < 0.35) { const k = ph / 0.35; circle(hx, Math.round(hy - 4 + k * (fy - hy - 2)), 2, '#f57a12'); }
-    else circle(hx + 8, fy - 2, 2, '#f57a12');
+    // the ball rests on the floor; every so often it's shot up, swishes through the net and bounces back
+    const ph = (T % 11) - 9, rx = hx + 14, ry = fy - 2;
+    if (ph < 0) circle(rx, ry, 2, '#f57a12');
+    else if (ph < 0.7) { const k = ph / 0.7; circle(Math.round(rx + (hx - rx) * k), Math.round(ry + (hy - 6 - ry) * k - Math.sin(k * Math.PI) * 12), 2, '#f57a12'); }
+    else if (ph < 1.2) { const k = (ph - 0.7) / 0.5; circle(hx, Math.round(hy - 6 + k * (fy - 2 - (hy - 6))), 2, '#f57a12'); }
+    else { const k = Math.min(1, (ph - 1.2) / 0.8); circle(Math.round(hx + (rx - hx) * k), Math.round(ry - Math.abs(Math.sin(k * Math.PI * 2)) * 5 * (1 - k)), 2, '#f57a12'); }
     // a pennant and a bookshelf
     R(f.x0 + 52, f.top + 8, 1, 10, '#8a5a3a'); for (let k = 0; k < 6; k++) R(f.x0 + 53, f.top + 8 + k, 10 - k * 1.6, 1, '#e8222b');
     const bx = f.x1 - 50;
@@ -873,6 +876,7 @@
 
   /* ---------- scene ---------- */
   SCENES.station = {
+    view: (w, h) => w > h ? [300, 400] : [300, 250],   // sideways, zoom out a little so all three floors fit
     menu,   // read by the automated tests
     modal: () => menu.open && !bed.on,
     _tiles: () => pickerTiles(),

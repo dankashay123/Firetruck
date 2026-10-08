@@ -21,7 +21,20 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) ac.suspend(); else { ac.resume(); if (started) keepAwake(); }
 });
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});   // offline play; not available in every viewer
+  // offline play; not available in every viewer
+  const hadController = !!navigator.serviceWorker.controller;
+  let swReg = null, freshPending = false;
+  navigator.serviceWorker.register('sw.js').then(r => { swReg = r; }).catch(() => {});
+  // A new version arrived: swap it in right away while we're still on the start screen,
+  // otherwise the next time the game goes back to the start screen or is reopened.
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) return;
+    if (!started) location.reload(); else freshPending = true;
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { if (freshPending) location.reload(); return; }
+    if (swReg) swReg.update().catch(() => {});
+  });
 }
 
 fitStage();
@@ -31,10 +44,10 @@ setInterval(watchInsets, 500);
 ['orientationchange', 'resize', 'pageshow'].forEach(t => window.addEventListener(t, () => { fitStage(); setTimeout(watchInsets, 60); }));
 let last = performance.now();
 function frame(now) {
-  update(Math.min(0.05, (now - last) / 1000));
+  requestAnimationFrame(frame);   // keep going even if something goes wrong in one frame
+  try { update(Math.min(0.05, (now - last) / 1000)); } catch (e) { console.error(e); }
   last = now;
-  draw();
-  requestAnimationFrame(frame);
+  try { draw(); } catch (e) { console.error(e); try { g = loG; g.setTransform(1, 0, 0, 1, 0, 0); } catch (e2) {} }
 }
 requestAnimationFrame(frame);
 

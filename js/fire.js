@@ -33,6 +33,8 @@
   }
   function windowBox(r, c) { return { x: F.hx + 9 + c * F.colW, y: L.floorY - (r + 1) * F.rowH + 7, w: 22, h: 18 }; }
   function placeTargets() {
+    // after a rotation there may be fewer trees, bushes or windows: let those fires go out
+    F.targets = F.targets.filter(t => t.kind === 'tree' ? t.i < F.trees.length : t.kind === 'bush' ? t.i < F.bushes.length : t.r < F.rows && t.c < F.cols);
     for (const t of F.targets) {
       if (t.kind === 'window') Object.assign(t, windowBox(t.r, t.c));
       else if (t.kind === 'tree') { const tr = F.trees[t.i]; t.x = tr.x - tr.r; t.y = L.floorY - 2 * tr.r - 14; t.w = 2 * tr.r; t.h = 2 * tr.r; t.r = tr.r; }
