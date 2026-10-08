@@ -24,7 +24,7 @@
     const maxAvail = B.signTop - 34 - L.safeT;
     const desired = W > H ? maxAvail : B.signTop - 30 - H * 0.3;   // sideways, every floor gets shown
     const avail = desired >= 40 ? Math.min(maxAvail, desired) : Math.max(34, Math.min(maxAvail, 56));
-    B.nFloors = avail >= 210 ? 3 : avail >= 116 ? 2 : 1;   // tall screens get a games room up top
+    B.nFloors = avail >= 180 ? 3 : avail >= 116 ? 2 : 1;   // tall screens get a games room up top
     B.floorH = Math.min(78, Math.floor(avail / B.nFloors));
     B.top = B.signTop - B.nFloors * B.floorH;
     B.floors = [];
@@ -37,6 +37,10 @@
     B.dogX = B.x - 19;
     B.hydX = B.x + B.w + 6;
     furnish();
+    // wide screens: life on the lawns either side (the slide and the ice cream truck move the dog and trees)
+    const yd = typeof YARD !== 'undefined' ? YARD.layout(B) : null;
+    B.leftTreeX = yd ? yd.leftTree : null; B.rightTreeX = yd ? yd.rightTree : null;
+    if (yd) B.dogX = yd.dogX;
     // mini-game launchers: one big menu button that opens into a grid of the rest
     const kinds = ['fire', 'amb', 'police', 'help', 'wash', 'icecream', 'dig', 'bath', 'trash', 'chopper', 'stickers', 'movies', 'drive', 'bed'];
     const side = B.x - L.safeL >= 100 && B.top - L.safeT < 120;
@@ -267,6 +271,7 @@
     updateVehicles(dt);
     updateCrew(dt);
     updateBedtime(dt);
+    YARD.update(dt, bed.on);
     dog.jump = Math.max(0, dog.jump - dt);
     bell.swing = Math.max(0, bell.swing - dt);
     if (hydrant.spray > 0) {
@@ -291,6 +296,7 @@
       if (menu.k > 0.6) for (const t of pickerTiles()) if (x >= t.x && x < t.x + t.w && y >= t.y && y < t.y + t.h) { SFX.chime(); launch(t.k); return true; }
       return true;
     }
+    if (YARD.tap(x, y, bed.on)) return true;
     if (PETS.tap('station0', x, y) || PETS.tap('station0c', x, y) || PETS.tap('station1', x, y)) return true;
     const r = L.blob / 2 + 4;
     for (const p of pots) {
@@ -406,6 +412,7 @@
   // the family's pets live at the station too: the dogs in the kitchen, the cat napping on the top bunk
   function stationPets(f) {
     const sleepy = bed.on;
+    if (YARD.on && !sleepy) return;   // out playing in the yard
     if (f.i === 0) {
       const one = B.nFloors < 2;
       PETS.draw(one ? 'station0c' : 'station0', { y: f.fy, x0: f.walk[0] + 26, x1: f.walk[1] - 6, who: one ? ['cat', 'vizsla', 'husky'] : ['vizsla', 'husky'],
@@ -574,8 +581,8 @@
   }
   function drawTrees() {
     const spots = [];
-    if (B.leftTree) spots.push(B.x - 46);
-    if (B.rightTree) spots.push(B.x + B.w + 34);
+    if (YARD.on) { if (B.leftTreeX) spots.push(B.leftTreeX); if (B.rightTreeX) spots.push(B.rightTreeX); }
+    else { if (B.leftTree) spots.push(B.x - 46); if (B.rightTree) spots.push(B.x + B.w + 34); }
     for (const tx of spots) drawTree(tx, L.floorY, 11);
   }
   function drawVehicle(v, i) {
@@ -899,11 +906,13 @@
       drawHills(L.hillY, L.floorY);
       drawTrees();
       drawBuilding();
+      YARD.drawBack(bed.on);
       if (bed.asleep) for (const f of B.floors) { drawRoom(f, false); drawCrew(f.i); stationPets(f); alpha(0.35, () => R(f.x0, f.top, f.x1 - f.x0, f.fy - f.top + 2, '#0b1030')); }
       drawRoad();
       drawProps();
       V.forEach((v, i) => { if (v.state === 'parked') drawVehicle(v, i); });
       drawDoors();
+      YARD.drawFront(bed.on);
       drawSnowCaps();
       V.forEach((v, i) => { if (v.state !== 'parked') drawVehicle(v, i); });
     },
