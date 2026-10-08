@@ -249,6 +249,7 @@
   /* ---------- input ---------- */
   function tap(x, y, id) {
     if (inBox(L.homeBtn, x, y)) { F.held = null; spraySound(0); rubSound(0); returnHome(F.vi); return true; }
+    if (PETS.tap('wash', x, y)) return true;
     if (F.state === 'done') {
       if (F.doneT > 1.2 && inBox(L.againBtn, x, y)) { F.state = 'exit'; F.t = 0; SFX.bell(); return true; }
     } else if (F.state !== 'exit') {
@@ -543,6 +544,8 @@
       drawRollers();
       if (Y.duck) scaled(Y.duck.x, Y.duck.yb - Math.round(Math.sin(F.bigDuckHop * Math.PI) * 6), 4, () => drawDuck(0, 0, false, 1));
       const done = F.state === 'done' || F.state === 'next' || F.cheer > 0;
+      if (!Y.att.roof) { const x0 = Y.att.x + 10, x1 = Math.min(W - L.safeR - 8, Y.att.x + 46); if (x1 - x0 > 12) PETS.draw('wash', { y: Y.att.yb, x0, x1, who: x1 - x0 > 30 ? ['cat', 'vizsla', 'husky'] : ['cat', 'husky'] }); }
+      else { const x0 = Math.max(Y.bx0 + 40, Y.att.x - 70), x1 = Y.att.x - 12; if (x1 - x0 > 12) PETS.draw('wash', { y: Y.top - 4, x0, x1, who: x1 - x0 > 40 ? ['cat', 'vizsla', 'husky'] : ['cat', 'husky'] }); }   // up on the roof with the attendant
       drawPerson({ type: 'dad', x: Y.att.x, yb: Y.att.yb, dir: -1, pose: done ? 'cheer' : 'wave', skin: SKIN[1], seed: 2, hop: F.state === 'done' && F.doneT < 2.4 ? Math.abs(Math.sin(F.doneT * 7)) * 3 : 0 });
     },
     drawLit() {

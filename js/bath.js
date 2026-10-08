@@ -131,6 +131,7 @@
     for (let k = 0; k < 9; k++) R(hx - 14 + k, hb - 19 - k, 28 - 2 * k, 1, '#2a6fe0');
     oval(hx, hb - 6, 5, 6, '#3a1a1a'); R(hx - 5, hb - 6, 11, 6, '#3a1a1a');
     R(hx - 4, hb - 25, 8, 3, '#ffffff'); R(hx - 3, hb - 24, 6, 1, '#e8a040');
+    PETS.draw('bath', { y: hb - 26, x0: hx, x1: hx + 1, who: ['cat'], spots: { cat: { x: hx, pose: Math.floor(T / 14) % 3 === 2 ? 'sleep' : 'sit' } } });
     // a mud puddle where the dogs have been playing
     oval(Math.max(14, Y.tx - 58), yG + 8, 14, 3, '#6a3a1a'); oval(Math.max(14, Y.tx - 58), yG + 7, 11, 2, '#8a5a2e');
     for (const p of st.prints) alpha(clamp01(p.life), () => { R(p.x, p.y, 2, 2, '#7a4a24'); R(p.x - 1, p.y - 2, 1, 1, '#7a4a24'); R(p.x + 2, p.y - 2, 1, 1, '#7a4a24'); });
@@ -329,6 +330,7 @@
     tap(x, y, id) {
       if (inBox(Y.home, x, y)) { goScene('station'); return true; }
       st.idle = 0;
+      if (PETS.tap('bath', x, y)) return true;
       // pop a floating bubble
       for (const f of st.floaters) if ((x - f.x) ** 2 + (y - f.y) ** 2 < (f.r + 4) ** 2) { f.life = 0; SND.play('pop', 0.9 + Math.random() * 0.4); sparkle(f.x, f.y, 3, 3, '#ffffff'); return true; }
       // squeak the rubber duck

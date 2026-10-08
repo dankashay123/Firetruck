@@ -64,3 +64,5 @@ The Digger, Dog Bath and Garbage Truck games use CC0 sounds from OpenGameArt.org
 - Digging: "Shovel Sound", "100 CC0 SFX #2" stones, "75 CC0 breaking/falling/hit SFX" rocks, "Generator Loop" engine, "100 CC0 SFX" spring (`audio/dig-*.mp3`)
 - Bath: "Squeak Toy Sounds", "Bubble sound effects", "Bubbles Pop", "40 CC0 water/splash/slime SFX", "100 CC0 SFX #2" water loop (`audio/bath-*.mp3`)
 - Garbage: "75 CC0 breaking/falling/hit SFX", "27 Metal Audio Samples", "100 CC0 SFX #2" air brake, "100 CC0 SFX" paper (`audio/trash-*.mp3`)
+
+The family cat's meows and purr are CC0 from OpenGameArt.org: "Meow" by Crystal Games and "Cat purr & meow" (`audio/cat-*.mp3`).

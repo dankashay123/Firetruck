@@ -321,6 +321,9 @@
     drawWorld() {},   // the kitchen is indoors: everything is drawn in the UI layer so night doesn't darken it
     drawKitchen() {
       wall();
+      // the cat has hopped up on the counter to watch (hoping for a lick)
+      { const kc = Math.max(1, Math.round(Y.k / 2)), cx = (Y.wide ? Y.row.x0 + 6 : L.safeL + 4) + 8 * kc;
+        PETS.draw('kitchen', { y: Y.yb, x0: cx, x1: cx + 1, who: ['cat'], k: kc, spots: { cat: { x: Math.round(cx / kc), pose: 'sit' } } }); }
       if (st.mode === 'swirl') {
         g.save(); g.beginPath(); g.rect(Y.row.x0 - 4, 0, Y.row.x1 - Y.row.x0 + 8, H); g.clip();   // the shelf window
         Y.mach.forEach(m => machine(m, m.i === st.mach));
@@ -364,6 +367,7 @@
       if (inBox(Y.back, x, y, 3)) { SCENES.icecream._keepMusic = true; play('pop'); goScene('icecream', { back: true }); return true; }
       for (const b of Y.tabs) if (inBox(b, x, y, 3)) { if (st.mode !== b.m) { st.mode = b.m; play('pop', 1.1); } return true; }
       for (const b of Y.tops) if ((x - b.x) ** 2 + (y - b.y) ** 2 <= (b.r + 5) ** 2) { addTopping(b.t); return true; }
+      if (PETS.tap('kitchen', x, y)) return true;
       if (built() && !st.serveOut && inBox(Y.serve, x, y, 4)) { serve(); return true; }
       if (st.mode === 'scoop') {
         for (const t of Y.tubs) if (x >= t.x - 2 && x < t.x + t.w + 2 && y >= t.y - 6 && y < t.y + t.h + 4) { addScoop(t.i); return true; }

@@ -273,6 +273,8 @@
       DOGDRAW[n](X(d.x), n === 'husky' ? -2 : 0, d.dir, { run: d.run, hop: d.hop / k, bark: d.bark > 0, wag: true, pant: n === 'husky' });
     }
     g.restore();
+    // the cat keeps to herself, sunning on the grass
+    PETS.draw('icecream', { y, x0: L.safeL + 12, x1: W - L.safeR - 12, who: ['cat'], k });
   }
   /* a picnic on a blanket, a kite flying high: life in the park */
   const PICNIC = [{ type: 'mom', skin: SKIN[2], treat: 1, dir: 1, dx: 7, seed: 1 }, { type: 'kid3', skin: SKIN[0], treat: 0, dir: -1, dx: 33, seed: 4 }];
@@ -400,6 +402,7 @@
     },
     tap(x, y) {
       if (inBox(Y.home, x, y)) { goScene('station'); return true; }
+      if (PETS.tap('icecream', x, y)) return true;
       if (SCENES.icekitchen && inBox(Y.kitchen, x, y, 3)) { SCENES.icecream._keepMusic = true; play('pop'); goScene('icekitchen'); return true; }
       const dy = dogY();
       for (const n of ['vizsla', 'husky']) {

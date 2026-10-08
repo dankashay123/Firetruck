@@ -375,6 +375,7 @@
   /* ---------- input ---------- */
   function tap(x, y, id) {
     if (inBox(L.homeBtn, x, y)) { hold = null; goScene('station'); return true; }
+    if (PETS.tap('chopper', x, y)) return true;
     if (st.phase === 'done' && st.doneT > 1.2 && inBox(L.againBtn, x, y, 6)) { hold = null; SFX.bell(); newRound(false); return true; }
     for (const b of st.birds) if (Math.abs(b.x - x) < 14 && Math.abs(b.y - y) < 12) scare(b);
     for (const t of st.targets) if (t.state === 'wait' && Math.abs(t.gx - x) < 14 && y > t.gy - 8 && y < t.yb + 4) { call(t); sparkle(t.gx, t.gy + 4, 8, 4, '#ffffff'); }
@@ -623,6 +624,7 @@
     R(0, G, W, 5, '#d8d2c2'); R(0, G, W, 1, '#b9b2a0');
     R(0, ry, W, L.palY - ry, '#4b4f5c'); R(0, ry, W, 2, '#8f8b80');
     for (let x = 4; x < W; x += 18) R(x, G + 20, 9, 1, '#ffd21f');
+    PETS.draw('chopper', { y: G + 4, x0: L.safeL + 16, x1: W - L.safeR - 16 });
     for (const p of st.peds) drawPerson({ type: p.type, x: p.x, yb: G + 4, dir: p.near ? (heli.x > p.x ? 1 : -1) : p.dir, pose: p.near ? 'wave' : 'stand', walk: !p.near, skin: p.skin, seed: p.seed });
     for (const t of st.targets) if (t.state === 'saved') {
       const [x, yb] = groundSpot(t);

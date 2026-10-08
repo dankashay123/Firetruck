@@ -796,6 +796,7 @@
   /* ---------- input ---------- */
   function tap(x, y, id) {
     if (inBox(L.flyHome, x, y)) { hold = null; goScene('station'); return true; }
+    if (PETS.tap('flyer', x, y)) return true;
     const wx = x + cam.x, wy = y + cam.y;
     surprise(wx, wy);
     if (hold === null) {
@@ -1041,6 +1042,7 @@
     for (let k = -26; k <= 26; k++) R(Math.round(pvx + k * c), Math.round(pvy + k * sn), 1, 2, '#e8222b');
     drawPerson({ type: 'kid', x: pvx - 22 * c, yb: pvy - 22 * sn, dir: 1, pose: 'sit', skin: SKIN[3], seed: 4 });
     drawPerson({ type: 'kid2', x: pvx + 22 * c, yb: pvy + 22 * sn, dir: -1, pose: 'sit', skin: SKIN[0], seed: 5 });
+    PETS.draw('flyer', { y: GY, x0: 3045, x1: 3110 });
   }
   function drawPools() {
     for (const p of pools) {

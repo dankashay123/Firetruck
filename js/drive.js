@@ -405,6 +405,10 @@
       for (let j = 3; j >= 1; j--) drawDuck(mx - dir * (4 + j * 7), py + 6 - (j % 2 ? hop : 0), false, dir, 0);
       drawDuck(mx, py + 7 - hop, true, dir, 0);
       R(px + 2, py + 6, pw - 4, 3, '#3f8fd0'); R(px + 8, py + 6, 6, 1, '#8cc8f0'); R(px + pw - 22, py + 7, 6, 1, '#8cc8f0');
+      { const f2 = (T * 0.08 + hsh(s.seed + 9)) % 2, u2 = f2 < 1 ? f2 : 2 - f2, d2 = f2 < 1 ? 1 : -1, dx = x + 44 + u2 * 52, D = SCENES.icecream && SCENES.icecream._dogs, hp = s.pet > 0 ? Math.round(Math.abs(Math.sin(T * 12)) * 4) : 0;
+        if (D) { D.husky(dx - d2 * 16, b - 1, d2, { run: true, wag: true, pant: true, hop: hp }); D.vizsla(dx, b, d2, { run: true, wag: true, bark: s.pet > 0, hop: hp }); }
+        const bx = dx + d2 * 14, bh = Math.round(Math.abs(Math.sin(T * 6)) * 5); R(bx - 1, b - 3 - bh, 3, 3, '#e8222b'); R(bx - 1, b - 3 - bh, 1, 1, '#ff8a8a');
+        PETS.catSit(x + 116, b, { swish: true, hop: s.cat > 0 ? 3 : 0, meow: s.cat > 0 }); }
       bench(x + 128, b - 9, b, 1);
       const p = s.sit, ph = p.hop > 0 ? Math.round(Math.sin(p.hop / 0.5 * Math.PI) * 3) : 0;
       drawPerson({ type: p.type, x: x + 128, yb: b - 9, pose: p.wave > 0 ? 'wave' : Math.floor(T / 2 + s.seed) % 3 ? 'sit' : 'eat', dir: -1, skin: p.skin, hair: p.hair, seed: 2, hop: ph });
@@ -414,6 +418,8 @@
     },
     tap(s, x, tx, ty) {
       const b = P.bY;
+      if (inRect(tx, ty, x + 108, b - 20, 16, 22)) { s.cat = 0.6; PETS.SND.load(); PETS.SND.play('meow'); setTimeout(() => { s.cat = 0; }, 600); return true; }
+      if (inRect(tx, ty, x + 20, b - 18, 96, 20)) { s.pet = 0.6; PETS.SND.load(); PETS.SND.play('bark'); setTimeout(() => PETS.SND.play('bark2', 1.1), 220); setTimeout(() => { s.pet = 0; }, 600); return true; }
       if (inRect(tx, ty, x + 26, b - 30, 94, 32)) { s.react = 0.8; SFX.quack(); fx(0, () => sparkle(tx, b - 14, 8, 5, '#ffffff')); return true; }
       if (inRect(tx, ty, x + 114, b - 34, 26, 36)) { s.sit.hop = 0.5; s.sit.wave = 2; SFX.boop(1.1); return true; }
       for (const [cx, r] of [[x + 10, P.treeR], [x + 146, P.treeR - 2]]) {

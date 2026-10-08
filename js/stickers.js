@@ -140,7 +140,9 @@
       if (ph) { R(x, y + 2, 1, 3, c); R(x + 1, y + 4, 1, 2, c); } else { R(x, y + 5, 2, 1, c); R(x + 1, y + 4, 1, 1, c); R(x - 1, y + 4, 1, 1, c); }
       if (a.dir < 0) g.restore();
     } },
-    cat: { w: 10, h: 8, k: 2, draw: (x, y, a) => drawCat(x + 5, y + 8 - (a.on ? Math.round(Math.abs(Math.sin(a.t * 8)) * 2) : 0), a.dir, '#f0a050') },
+    cat: { w: 13, h: 18, k: 2, draw: (x, y, a) => PETS.catSit(x + 6, y + 18, { hop: a.on ? Math.round(Math.abs(Math.sin(a.t * 8)) * 2) : 0, meow: a.on, swish: true }) },
+    vizsla: { w: 21, h: 15, k: 2, draw: (x, y, a) => SCENES.icecream && SCENES.icecream._dogs.vizsla(x + 10, y + 15, a.dir, { run: a.on, wag: true, bark: a.on, hop: a.on ? Math.round(Math.abs(Math.sin(a.t * 8)) * 2) : 0 }) },
+    husky: { w: 21, h: 19, k: 2, draw: (x, y, a) => SCENES.icecream && SCENES.icecream._dogs.husky(x + 10, y + 18, a.dir, { run: a.on, wag: true, bark: a.on, pant: !a.on, hop: a.on ? Math.round(Math.abs(Math.sin(a.t * 8)) * 2) : 0 }) },
     ducks: { w: 25, h: 10, k: 2, walk: true, draw(x, y, a) {
       const step = a.on ? Math.floor(T * 8) % 2 : 0, d = a.dir;
       const spots = d > 0 ? [[3, 0], [10, 1], [19, 2]] : [[6, 2], [15, 1], [22, 0]];
@@ -175,7 +177,7 @@
     cloud: { w: 30, h: 17, k: 1, draw: cloudSprite },
     flower: { w: 9, h: 16, k: 2, draw: (x, y, a) => bmp(x, y, FLOWER, { a: a.on && Math.floor(T * 6) % 2 ? '#ffb3da' : '#ff6fb4', c: '#ffd21f', g: '#3fb43a', d: '#7a4a2a' }) },
   };
-  const ORDER = ['fire', 'police', 'amb', 'heli', 'ff', 'cop', 'medic', 'kid', 'kid2', 'dog', 'cat', 'ducks',
+  const ORDER = ['fire', 'police', 'amb', 'heli', 'ff', 'cop', 'medic', 'kid', 'kid2', 'vizsla', 'husky', 'cat', 'ducks',
     'tree', 'house', 'hydrant', 'cone', 'ladder', 'bell', 'flame', 'star', 'heart', 'balloon', 'sun', 'rainbow', 'cloud', 'flower'];
 
   /* ---------- what each sticker does when tapped ---------- */
@@ -195,7 +197,9 @@
         break;
       case 'kid': case 'kid2': s.act = 1.6; [880, 784, 988, 880, 1047].forEach((f, i) => tone('sine', f, i * 0.09, 0.1, 0.12)); break;
       case 'dog': SFX.woof(); s.act = 1.4; break;
-      case 'cat': SFX.meow(); s.act = 1; break;
+      case 'cat': PETS.SND.load(); PETS.SND.play('meow'); s.act = 1; break;
+      case 'vizsla': PETS.SND.load(); PETS.SND.play('bark'); s.act = 1.4; break;
+      case 'husky': PETS.SND.load(); PETS.SND.play('bark2', 1.1); s.act = 1.4; break;
       case 'ducks': SFX.quack(); setTimeout(SFX.peep, 450); s.act = 1.6; s.walk = 1.6; break;
       case 'tree': noise(0, 0.6, 0.12, 2500, 0.6); s.act = 0.6;
         spawn(8, () => ({ x: cx + rand(-11, 11), y: cy - bh * 0.25 + rand(-8, 8), vx: rand(-14, 14), vy: rand(-6, 6), g: 30, life: 1.3, max: 1.3, s: 2, c: Math.random() < 0.5 ? '#5bb85a' : '#3f9a45' }));

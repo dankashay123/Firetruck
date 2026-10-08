@@ -678,6 +678,7 @@
     drawPerson({ type: p.type, x: sx, yb: p.y, dir, pose: waving ? (isChild(p.type) ? 'cheer' : 'wave') : p.pose, skin: p.skin, hair: p.hair, seed: p.seed, hop });
   }
   function drawSidewalkPeople() {
+    g.save(); g.translate(-Math.round(st.cam), 0); PETS.draw('amb', { y: P.backY, x0: P.kx + 58, x1: P.kx + 110 }); g.restore();
     const list = [];
     for (const p of st.statics) { const sx = p.x - st.cam; if (sx > -30 && sx < W + 30) list.push([p.y - (p.pose === 'sit' ? -8 : 0) - 20, () => drawStatic(p, sx)]); }
     for (const p of st.peds) { if (!p.on) continue; const sx = p.x - st.cam; if (sx > -40 && sx < W + 40) list.push([P.lanes[p.lane], () => drawPed(p, sx)]); }
@@ -829,6 +830,7 @@
   function tap(x, y, id) {
     const ph = st.phase;
     if (inBox(L.homeBtn, x, y)) { SFX.boop(); returnHome(AMB); return true; }
+    if (PETS.tap('amb', x, y)) return true;
     if (ph === 'drive') {
       if (!inBox(L.againBtn, x, y, 6) && tapPerson(x, y)) return true;
       if (!st.auto) {

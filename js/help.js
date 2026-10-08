@@ -754,6 +754,7 @@
       for (const f of Y.flowers) { R(f.x, f.y, 2, 2, f.c); R(f.x, f.y + 2, 1, 1, '#3f9a45'); }
       for (const h of Y.houses) drawHouse(h);
       for (const t of Y.trees) drawDistantTree(t.x, t.y);
+      PETS.draw('help', { y: Y.roadY - 1, x0: L.safeL + 24, x1: W - L.safeR - 24 });
       drawRoad(Y.roadY, Y.roadH);
       const c = sc(), s = st.s;
       c.back(s);
@@ -802,6 +803,7 @@
       }
       const c = sc();
       if (c.tap(st.s, x, y)) return true;
+      if (PETS.tap('help', x, y)) return true;
       if (st.state === 'wait' || st.state === 'drive' || st.state === 'hmm') {
         const a = c.ask(st.s), { w, h } = bubbleSize(bubU());
         if (near(x, y, a.x, a.y - h / 2 - 3, w / 2 + 3, h / 2 + 3)) { st.bub = 0.3; SFX.boop(1.4); return true; }

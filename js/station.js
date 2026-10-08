@@ -291,6 +291,7 @@
       if (menu.k > 0.6) for (const t of pickerTiles()) if (x >= t.x && x < t.x + t.w && y >= t.y && y < t.y + t.h) { SFX.chime(); launch(t.k); return true; }
       return true;
     }
+    if (PETS.tap('station0', x, y) || PETS.tap('station0c', x, y) || PETS.tap('station1', x, y)) return true;
     const r = L.blob / 2 + 4;
     for (const p of pots) {
       if ((x - p.cx) ** 2 + (y - p.cy) ** 2 <= r * r) {
@@ -402,6 +403,18 @@
   }
 
   /* ---------- draw: rooms upstairs ---------- */
+  // the family's pets live at the station too: the dogs in the kitchen, the cat napping on the top bunk
+  function stationPets(f) {
+    const sleepy = bed.on;
+    if (f.i === 0) {
+      const one = B.nFloors < 2;
+      PETS.draw(one ? 'station0c' : 'station0', { y: f.fy, x0: f.walk[0] + 26, x1: f.walk[1] - 6, who: one ? ['cat', 'vizsla', 'husky'] : ['vizsla', 'husky'],
+        spots: sleepy ? { vizsla: { x: f.x1 - 44, pose: 'sleep' }, husky: { x: f.x1 - 70, pose: 'sleep' }, cat: { x: f.x1 - 20, pose: 'sleep' } } : null });
+    } else if (f.i === 1) {
+      const pose = sleepy || Math.floor(T / 18) % 3 ? 'sleep' : 'sit';
+      PETS.draw('station1', { y: f.fy - 29, x0: f.bunk + 14, x1: f.bunk + 22, who: ['cat'], spots: { cat: { x: f.bunk + 17, pose } } });
+    }
+  }
   function drawRoom(f, lightsOn) {
     const w = f.x1 - f.x0, h = f.fy - f.top;
     const wall = lightsOn ? '#f3e2c3' : '#7d6f60', wain = lightsOn ? '#e2c99e' : '#6e604f';
@@ -882,7 +895,7 @@
       drawHills(L.hillY, L.floorY);
       drawTrees();
       drawBuilding();
-      if (bed.asleep) for (const f of B.floors) { drawRoom(f, false); drawCrew(f.i); alpha(0.35, () => R(f.x0, f.top, f.x1 - f.x0, f.fy - f.top + 2, '#0b1030')); }
+      if (bed.asleep) for (const f of B.floors) { drawRoom(f, false); drawCrew(f.i); stationPets(f); alpha(0.35, () => R(f.x0, f.top, f.x1 - f.x0, f.fy - f.top + 2, '#0b1030')); }
       drawRoad();
       drawProps();
       V.forEach((v, i) => { if (v.state === 'parked') drawVehicle(v, i); });
@@ -893,7 +906,7 @@
     drawLit() {
       const k = nightK();
       if (k > 0.02) drawBuildingLights(k);
-      if (!bed.asleep) for (const f of B.floors) { drawRoom(f, true); drawCrew(f.i); }
+      if (!bed.asleep) for (const f of B.floors) { drawRoom(f, true); drawCrew(f.i); stationPets(f); }
       drawCrew('down');
       drawParticles();
     },

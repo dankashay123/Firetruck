@@ -111,6 +111,7 @@
   function tap(x, y, id) {
     if (inBox(L.homeBtn, x, y)) { held = null; spraySound(0); returnHome(VI.fire); return true; }
     if (F.state === 'done' && F.doneT > 1.2 && inBox(L.againBtn, x, y)) { SFX.bell(); newFire(); F.state = 'spray'; return true; }
+    if (PETS.tap('fire', x, y)) return true;
     if (F.state === 'spray') { held = id; aimAt(x, y); F.spray = 0.4; return true; }
     return false;
   }
@@ -212,6 +213,15 @@
       drawHills(L.hillY, L.floorY);
       drawHouse();
       drawTargets(false);
+      { // the family's pets watch from the lawn beside the house (the bigger side)
+        const a = [L.safeL + 12, F.hx - 14], b = [F.hx + F.hw + 30, W - L.safeR - 10];
+        for (const t of F.trees) {   // and never right next to a tree that might be burning
+          if (t.x < F.hx) { if (t.x + t.r + 10 > a[0] && t.x - t.r - 10 < a[1]) { if (t.x - a[0] > a[1] - t.x) a[1] = t.x - t.r - 10; else a[0] = t.x + t.r + 10; } }
+          else if (t.x + t.r + 10 > b[0] && t.x - t.r - 10 < b[1]) { if (t.x - b[0] > b[1] - t.x) b[1] = t.x - t.r - 10; else b[0] = t.x + t.r + 10; }
+        }
+        const [x0, x1] = a[1] - a[0] >= b[1] - b[0] ? a : b, room = x1 - x0;
+        if (room >= 4) PETS.draw('fire', { y: L.floorY, x0, x1, who: room > 60 ? ['cat', 'vizsla', 'husky'] : room > 24 ? ['cat', 'vizsla'] : ['cat'] });
+      }
       drawRoad();
       if (F.state !== 'arrive') R(F.truckX + 30, L.laneY - 2, F.ffX - F.truckX - 28, 2, '#3a3d46');
       const bob = F.state === 'arrive' ? (Math.floor(F.tx / 7) % 2 ? 0 : -1) : 0;

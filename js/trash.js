@@ -79,7 +79,6 @@
     if (h < 0.4) drawTree(x - 30, base - 2, 9);
     // a mailbox by the walk
     R(x - 12, base - 2, 1, 6, '#5a3a22'); R(x - 15, base - 5, 7, 4, ['#e8222b', '#2a6fe0', '#3a3d46'][i % 3]);
-    if (i === 5) drawCat(x + 22, base - 7, -1, '#f5a24a');
   }
   function center(seg) {
     const x = centerX(seg), base = Y.yR - 18, w = 120, top = base - 52;
@@ -139,6 +138,7 @@
         S_.vizsla(x + 16, base, -1, { bark: d.bark > 0 && Math.floor(T * 8) % 2 === 1, wag: true, hop: d.hop * 0.7 });
         for (let k = 0; k < HW; k += 4) if (Math.abs(k - 32) >= 8) R(x - 32 + k, base - 6, 2, 6, '#ffffff');
         R(x - 32, base - 4, HW, 1, '#ffffff');
+        if (Math.abs(x - st.truck.x) < W) PETS.draw('trash', { y: base - 6, x0: x + 26, x1: x + 27, who: ['cat'], spots: { cat: { x: x + 26, pose: 'sit' } } });
       }
       // a kid in the yard of house 4 who loves the garbage truck
       const kx = houseX(seg, 4) - 18;
@@ -453,6 +453,7 @@
       const wx = x + st.cam, tr = st.truck;
       // birds on the wire
       for (const b of st.birds) if (b.fly <= 0 && Math.abs(wx - b.x) < 8 && Math.abs(y - (Y.yR - 96)) < 14) { scatterBirds(); return true; }
+      if (PETS.tap('trash', x, y)) return true;
       // the dogs and the kid
       const seg = Math.floor(wx / SEG), dx = houseX(seg, 2);
       if (Math.abs(wx - dx) < 30 && y > Y.yR - 60 && y < Y.yR - 14) { st.dogs.bark = 0.5; st.dogs.hop = 6; SND.play('bark'); setTimeout(() => SND.play('bark2'), 250); return true; }

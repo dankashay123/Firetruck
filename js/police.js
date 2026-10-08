@@ -332,6 +332,7 @@
         R(lx - 1, sw - 40, 2, 46, '#4d5560'); R(lx - 2, sw + 4, 4, 3, '#3a3f48');
         R(lx - 1, sw - 42, 7, 2, '#4d5560'); R(lx + 2, sw - 41, 6, 3, '#3a3f48'); R(lx + 3, sw - 38, 4, 1, '#fff6b0');
       }
+      PETS.draw('police', { y: backY() - 1, x0: L.safeL + 20, x1: W - L.safeR - 20 });
       for (const w of st.walkers) drawPerson({ type: w.type, x: w.x, yb: backY(), dir: w.dir, pose: w.wave > 0 ? 'wave' : 'stand', walk: w.wave <= 0, hop: Math.round(Math.sin(Math.min(1, w.hop / 0.5) * Math.PI) * 4), skin: w.skin, seed: w.seed });
       // road
       const ry = st.roadY;
@@ -392,6 +393,7 @@
     },
     tap(x, y) {
       if (inBox(L.homeBtn, x, y)) { returnHome(VI.police); return true; }
+      if (PETS.tap('police', x, y)) return true;
       if (st.phase === 'party') {
         if (st.partyT > 1.0 && inBox(L.againBtn, x, y)) {
           newRound(); st.phase = 'play'; st.stopOn = false; SFX.chime();

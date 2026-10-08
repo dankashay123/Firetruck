@@ -624,6 +624,7 @@
       crane();
       g.save(); g.translate(-Math.round(st.cam), Y.yG);
       fence();
+      PETS.draw('dig', { y: -31, x0: 10, x1: 300 });
       mixer();
       siteDraw();
       drawPile();
@@ -665,6 +666,7 @@
       if (inBox(Y.home, x, y)) { goScene('station'); return true; }
       st.idle = 0;
       const wx = x + st.cam, wy = y - Y.yG, tr = st.truck;
+      if (PETS.tap('dig', x, y)) return true;
       for (const c of st.cones) if (Math.abs(wx - c.x) < 8 && wy > c.y - 18 && wy < c.y + 4) { c.hop = 8; SND.play('boing', 0.9 + Math.random() * 0.3); return true; }
       if (wy > 15) {   // something buried?
         let best = null, bd = 1e9;
