@@ -108,10 +108,15 @@
     if (c.vi != null) c.h = Math.max(c.h, V[c.vi].h);
     return c;
   }
-  function nextKind(kind) {
+  function nextKind(kind, step = 1) {
     let i = ORDER.indexOf(kind);
-    for (let n = 0; n < ORDER.length; n++) { i = (i + 1) % ORDER.length; if (KINDS[ORDER[i]].ok()) return ORDER[i]; }
+    for (let n = 0; n < ORDER.length; n++) { i = (i + step + ORDER.length) % ORDER.length; if (KINDS[ORDER[i]].ok()) return ORDER[i]; }
     return 'fire';
+  }
+  // the arrows beside the bay: pick another vehicle (the one in the wash drives out first)
+  function pickVehicle(step) {
+    if (F.state === 'exit') { F.pick = nextKind(F.pick || F.kind, step); return; }
+    stopLoops(); F.pick = nextKind(F.kind, step); F.state = 'exit'; F.t = 0; SFX.boop(step > 0 ? 1.3 : 1.1);
   }
 
   /* ---------- layout ---------- */
@@ -157,6 +162,8 @@
     const span = Math.min((right - left) / 3, tb + 30);
     const g0 = left + ((right - left) - span * 3) / 2;
     Y.tools = [0, 1, 2].map(k => ({ x: Math.round(g0 + span * (k + 0.5) - tb / 2), y: L.palY + Math.floor((L.palH - tb) / 2), s: tb }));
+    const as = Math.max(26, Math.min(36, L.blob)), ay = Math.round(Y.vyb - 40 - as / 2);
+    Y.prev = { x: L.safeL + 4, y: ay, s: as }; Y.next = { x: W - L.safeR - 4 - as, y: ay, s: as };
     if (scene === 'wash') setClouds(L.safeT + 10, Math.max(L.safeT + 30, Y.top - 26));
     if (cur) fitVehicle();
     if (F.state === 'work' || F.state === 'next' || F.state === 'done') F.x = targetX();
@@ -368,7 +375,7 @@
     } else if (F.state === 'exit') {
       const sp = Math.min(240, 30 + F.t * 220);
       F.x += sp * dt; F.rot += sp * dt / 12; if (cur.vi != null) V[cur.vi].rot += sp * dt / 12;
-      if (F.x > W + 10) newVehicle(nextKind(F.kind));
+      if (F.x > W + 10) { const k = F.pick || nextKind(F.kind); F.pick = null; newVehicle(k); }
     } else if (F.state === 'work') {
       if (F.held === null) F.idle += dt; else F.idle = 0;
       if (F.step === 1) {
@@ -467,6 +474,8 @@
   function stopLoops() { F.held = null; spraySound(0); rubSound(0); blowSound(0); brushLoop(0); }
   function tap(x, y, id) {
     if (inBox(L.homeBtn, x, y)) { stopLoops(); returnHome(F.vi); return true; }
+    if (inBox(Y.prev, x, y)) { pickVehicle(-1); return true; }
+    if (inBox(Y.next, x, y)) { pickVehicle(1); return true; }
     if (PETS.tap('wash', x, y)) return true;
     if (F.state === 'done') {
       if (F.doneT > 1.8 && inBox(L.againBtn, x, y)) { F.state = 'exit'; F.t = 0; SFX.bell(); return true; }
@@ -872,6 +881,13 @@
     drawUI() {
       drawStrip();
       drawHomeButton();
+      for (const [b, d] of [[Y.prev, -1], [Y.next, 1]]) {   // choose another vehicle
+        const p = Math.round(Math.sin(T * 3 + d) * 1);
+        button({ x: b.x, y: b.y + p, s: b.s }, '#ffd21f', '#c99410');
+        const cx = b.x + b.s / 2, cy = b.y + p + b.s / 2, u = Math.max(1, Math.floor(b.s / 12));
+        for (let i = 0; i < 4; i++) R(cx + d * (i - 1) * u - (d < 0 ? u : 0), cy - (4 - i) * u, u, (8 - 2 * i) * u, '#ffffff');
+        R(d > 0 ? cx - 4 * u : cx, cy - u, 4 * u, 2 * u, '#ffffff');
+      }
       if (F.state === 'done' || F.state === 'exit') {
         if (F.state === 'done' && F.doneT > 1.8) drawAgainButton(L.againBtn, '#2a6fe0', '#1a3f9a', bubbleIcon);
       } else {
@@ -921,5 +937,6 @@
     _go: kind => { if (KINDS[kind] && KINDS[kind].ok()) newVehicle(kind); },
     _cur: () => cur && { kind: cur.kind, len: cur.len, h: cur.h, Z },
     _brushes: brushes,
+    _arrowY: () => Y.next.y + Y.next.s / 2,
   };
 })();

@@ -1063,7 +1063,7 @@
       drawHomeButton();
     },
     tap(x, y, id) {
-      if (inBox(L.homeBtn, x, y)) { exit(); return true; }
+      if (inBox(L.homeBtn, x, y)) { window.movieQuit = true; exit(); return true; }
       const c = ctl();
       if (st.paused || st.ui > 0) {
         st.ui = 3.5;

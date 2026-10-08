@@ -1049,7 +1049,7 @@
       if (t >= END) { ranOut = true; exit(); }
     },
     tap(x, y, id) {
-      if (inBox(homeBtn(), x, y, 6)) { SFX.pop(); exit(); return true; }
+      if (inBox(homeBtn(), x, y, 6)) { SFX.pop(); window.movieQuit = true; exit(); return true; }
       const c = ctl();
       if (ctlS.paused || ctlS.ui > 0) {
         ctlS.ui = 3.5;

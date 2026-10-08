@@ -121,6 +121,8 @@
     layout,
     enter(arg) {
       st.watched = arg && arg.watched || null; st.t = 0; st.next = null; layout();
+      if (window.movieQuit) playAll = false;   // left a cartoon early with its home button: the marathon is over
+      window.movieQuit = false;
       if (playAll && st.watched) {   // line up the next cartoon, or finish the marathon
         const eps = availEps(), i = eps.findIndex(e => e.kind === st.watched);
         if (i >= 0 && i + 1 < eps.length) st.next = { e: eps[i + 1], t: 4 };

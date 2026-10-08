@@ -708,7 +708,7 @@
       drawHomeButton(homeBtn());
     },
     tap(x, y, id) {
-      if (inBox(homeBtn(), x, y)) { SFX.boop(); finish(); return true; }
+      if (inBox(homeBtn(), x, y)) { SFX.boop(); window.movieQuit = true; finish(); return true; }
       const c = ctl();
       if (st.paused || st.ui > 0) {
         st.ui = 3.5;
