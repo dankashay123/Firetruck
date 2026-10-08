@@ -1,6 +1,6 @@
 // Offline support: everything the game needs is cached on first visit.
 // Bump VERSION whenever any file changes so devices pick up the update.
-const VERSION = 'fire-station-v50';
+const VERSION = 'fire-station-v51';
 const FILES = [
   './',
   './index.html',
@@ -25,6 +25,7 @@ const FILES = [
   './js/toys.js',
   './js/pets.js',
   './js/station_yard.js',
+  './js/movie_ice.js',
   './js/dig.js',
   './js/bath.js',
   './js/trash.js',
@@ -55,6 +56,9 @@ const FILES = [
   './audio/splash.mp3',
   './audio/crunch.mp3',
   './audio/cat-meow.mp3',
+  './audio/station-music.mp3',
+  './audio/mv-chime.mp3',
+  './audio/mv-plop.mp3',
   './audio/cat-meow2.mp3',
   './audio/cat-purr.mp3',
   './audio/dig-scoop.mp3',

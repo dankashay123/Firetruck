@@ -7,6 +7,7 @@
     { kind: 'amb', scene: 'movieAmb', i: VI.amb, bg: '#f4f7fb' },
     { kind: 'book', scene: 'movieBook', cover: true, bg: '#e2b440', sky: '#f4c8b2' },
     { kind: 'dogs', scene: 'movieDogs', cover: true, bg: '#5a9a42', sky: '#a2d2ee' },
+    { kind: 'ice', scene: 'movieIce', cover: true, bg: '#ff8fb8', sky: '#ffe0ec' },
   ];
   const st = { cards: [], watched: null, t: 0, scale: 1 };
   let tmp = null;

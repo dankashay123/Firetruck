@@ -272,6 +272,7 @@
     updateCrew(dt);
     updateBedtime(dt);
     YARD.update(dt, bed.on);
+    stationMusic(!bed.on && !pendingMission);
     dog.jump = Math.max(0, dog.jump - dt);
     bell.swing = Math.max(0, bell.swing - dt);
     if (hydrant.spray > 0) {
@@ -283,6 +284,14 @@
       const f = B.floors[0];
       parts.push({ x: f.x1 - 33 + rand(-2, 2), y: f.fy - 24, vx: rand(-3, 3), vy: -10, g: 0, life: 1.2, max: 1.2, s: 2, c: '#ffffff' });
     }
+  }
+
+  // soft background music around the station (it rests during bedtime and missions)
+  let music = null;
+  function stationMusic(on) {
+    if (!music && typeof TOY !== 'undefined') music = TOY.bank({}, {}, 'station-music', 0.13);
+    if (!music) return;
+    music.load(); if (music.playing() !== on || music.wantMusic !== on) music.music(on);
   }
 
   /* ---------- tap ---------- */
@@ -899,6 +908,7 @@
       }
       for (const p of crew) if (p.state === 'gone') p.t = Math.min(p.t, rand(0.5, 3));
     },
+    leave() { stationMusic(false); },
     update,
     tap,
     drawWorld() {

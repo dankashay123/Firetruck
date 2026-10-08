@@ -66,3 +66,7 @@ The Digger, Dog Bath and Garbage Truck games use CC0 sounds from OpenGameArt.org
 - Garbage: "75 CC0 breaking/falling/hit SFX", "27 Metal Audio Samples", "100 CC0 SFX #2" air brake, "100 CC0 SFX" paper (`audio/trash-*.mp3`)
 
 The family cat's meows and purr are CC0 from OpenGameArt.org: "Meow" by Crystal Games and "Cat purr & meow" (`audio/cat-*.mp3`).
+
+Sprinkles and the Ice Cream Mountain (cartoon) and the station's background music use CC0 sounds from OpenGameArt.org:
+- Station music: "Quaint Town" (`audio/station-music.mp3`)
+- Chime: "Bell Dings/Chimes"; plop: "Wet squish slurp impacts" (`audio/mv-*.mp3`); the cartoon's tune is "Childhood Flavors" (`audio/ic-music.mp3`)
