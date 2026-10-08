@@ -372,7 +372,7 @@
       src.connect(gn); gn.connect(master); src.start(0, (st.t - MUSIC_FROM) % music.buf.duration);
       music.src = src; music.gain = gn;
     }
-    if (music.gain) music.gain.gain.value = 0.3 * clamp01((st.t - MUSIC_FROM) / 2) * clamp01((END - 0.3 - st.t) / 3);
+    if (music.gain) music.gain.gain.value = 0.18 * clamp01((st.t - MUSIC_FROM) / 2) * clamp01((END - 0.3 - st.t) / 3);
   }
 
   /* ---------- the story ---------- */

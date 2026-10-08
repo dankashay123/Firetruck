@@ -12,7 +12,11 @@
     { kind: 'bathday', scene: 'movieBath', cover: true, bg: '#7ad0ff', sky: '#d4ecff' },
     { kind: 'night', scene: 'movieNight', cover: true, bg: '#2a2050', sky: '#3a3f8a' },
   ];
-  const st = { cards: [], watched: null, t: 0, scale: 1 };
+  const st = { cards: [], watched: null, t: 0, scale: 1, next: null };
+  // "Play all": the cartoons play one after another (good for car rides). Lives outside the
+  // scene so it survives each cartoon; a tap on the stop button or the home button ends it.
+  let playAll = false;
+  const availEps = () => EPISODES.filter(e => SCENES[e.scene]);
   let tmp = null;
 
   // Draw a vehicle scaled up by an integer factor, keeping the pixels crisp.
@@ -50,6 +54,7 @@
       return { e, x: Math.round(x0 + (uw - rowW) / 2 + col * (cw + 10)), y: Math.round(gy + row * (h + gapY)), w: cw, h };
     });
     st.home = { x: L.safeL + 8, y: y1 - L.blob, s: L.blob };
+    st.all = { x: x1 - L.blob - 6, y: y1 - L.blob, s: L.blob };
   }
 
   function drawCurtains() {
@@ -100,23 +105,55 @@
     for (let r = 0; r < 7; r++) R(bx - 2, byy - 3 + r, Math.min(r, 6 - r) + 1, 1, '#ffffff');
   }
 
+  // the play-all button: two arrows (play them all), or a stop square while the marathon is on
+  function drawPlayAll() {
+    const b = st.all, p = !playAll && st.t > 2 ? Math.round(Math.sin(T * 4) * 1) : 0;
+    button({ x: b.x - p, y: b.y - p, s: b.s + 2 * p }, playAll ? '#e8222b' : '#3fb43a', playAll ? '#a3121d' : '#1f7a2a');
+    const cx = Math.round(b.x + b.s / 2), cy = Math.round(b.y + b.s / 2), u = Math.max(1, Math.floor(b.s / 20));
+    if (playAll) { R(cx - 4 * u, cy - 4 * u, 8 * u, 8 * u, '#ffffff'); R(cx - 3 * u, cy - 3 * u, 6 * u, 6 * u, '#ffd0d0'); return; }
+    for (const ox of [-6, 0]) for (let i = 0; i < 6; i++) R(cx + (ox + i) * u, cy - (6 - i) * u, u, (12 - 2 * i) * u, '#ffffff');
+  }
+
   SCENES.movies = {
     noWeather: true,
     view: [186, 200],
     freeTouch: true,
     layout,
-    enter(arg) { st.watched = arg && arg.watched || null; st.t = 0; layout(); },
-    update(dt) { st.t += dt; },
+    enter(arg) {
+      st.watched = arg && arg.watched || null; st.t = 0; st.next = null; layout();
+      if (playAll && st.watched) {   // line up the next cartoon, or finish the marathon
+        const eps = availEps(), i = eps.findIndex(e => e.kind === st.watched);
+        if (i >= 0 && i + 1 < eps.length) st.next = { e: eps[i + 1], t: 4 };
+        else { playAll = false; confetti(40); SFX.fanfare(); }
+      } else playAll = false;
+    },
+    update(dt) {
+      st.t += dt;
+      if (st.next && (st.next.t -= dt) <= 0) { const e = st.next.e; st.next = null; SFX.chime(); goScene(e.scene); }
+    },
     drawWorld() {},
     drawUI() {
       drawCurtains();
       drawHeader();
       st.cards.forEach(drawCard);
+      if (st.next) {   // a countdown ring around the card that plays next
+        const c = st.cards.find(c => c.e === st.next.e);
+        if (c) {
+          const k = 1 - st.next.t / 4, n = 40, cx = c.x + c.w / 2, cy = c.y + c.h / 2, rx = c.w / 2 + 6, ry = c.h / 2 + 6;
+          for (let i = 0; i < n * k; i++) { const a = -Math.PI / 2 + i / n * Math.PI * 2; R(Math.round(cx + Math.cos(a) * rx) - 1, Math.round(cy + Math.sin(a) * ry) - 1, 3, 3, '#ffd21f'); }
+        }
+      }
       drawHomeButton(st.home);
+      drawPlayAll();
       drawParticles();
     },
     tap(x, y) {
-      if (inBox(st.home, x, y)) { goScene('station'); return true; }
+      if (inBox(st.home, x, y)) { playAll = false; st.next = null; goScene('station'); return true; }
+      if (inBox(st.all, x, y)) {
+        if (playAll) { playAll = false; st.next = null; SFX.pop(); }
+        else { const eps = availEps(); if (eps.length) { playAll = true; SFX.chime(); goScene(eps[0].scene); } }
+        return true;
+      }
       for (const c of st.cards) {
         if (x >= c.x - 4 && x < c.x + c.w + 4 && y >= c.y - 4 && y < c.y + c.h + 4) {
           SFX.chime(); sparkle(c.x + c.w / 2, c.y + c.h / 2, c.w / 2, 12);

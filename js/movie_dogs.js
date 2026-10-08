@@ -495,12 +495,12 @@
     if (!music.buf || !ac) return false;
     if (!music.src && st.t < END - 1) {
       const src = ac.createBufferSource(), gn = ac.createGain();
-      src.buffer = music.buf; src.loop = true; gn.gain.value = 0.32;
+      src.buffer = music.buf; src.loop = true; gn.gain.value = 0.18;
       src.connect(gn); gn.connect(master);
       src.start(0, st.t % music.buf.duration);
       music.src = src; music.gain = gn;
     }
-    if (music.gain) music.gain.gain.value = 0.32 * clamp01((END - 0.4 - st.t) / 2.2);
+    if (music.gain) music.gain.gain.value = 0.18 * clamp01((END - 0.4 - st.t) / 2.2);
     return true;
   }
   const NOTE = { C: 523, D: 587, E: 659, F: 698, G: 784, A: 880, c: 1047, g: 392, a: 440 };

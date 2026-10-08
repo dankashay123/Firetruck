@@ -355,7 +355,7 @@
       music.src = src; music.gain = gn;
     }
     const t = st.t, duck = t > 12.6 && t < 20.4 ? 0.4 : t > 29.6 && t < 40 ? 0.45 : t > 55.5 ? 0.6 : 1;
-    if (music.gain) music.gain.gain.setTargetAtTime(0.24 * clamp01((t - from) / 1.5) * clamp01((END - 0.4 - t) / 2.5) * duck, ac.currentTime, 0.15);
+    if (music.gain) music.gain.gain.setTargetAtTime(0.17 * clamp01((t - from) / 1.5) * clamp01((END - 0.4 - t) / 2.5) * duck, ac.currentTime, 0.15);
   }
   const sirenOn = t => t > 29.8 && t < 39.8;
 

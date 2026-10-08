@@ -107,7 +107,7 @@
   function startMusic() {
     if (!music.buf || music.src || !ac) return;
     const src = ac.createBufferSource(), gn = ac.createGain();
-    src.buffer = music.buf; src.loop = true; gn.gain.value = 0.26;
+    src.buffer = music.buf; src.loop = true; gn.gain.value = 0.2;
     src.connect(gn); gn.connect(master); src.start();
     music.src = src; music.gain = gn;
   }

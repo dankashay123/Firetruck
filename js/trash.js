@@ -20,7 +20,7 @@
     crunch() { for (let i = 0; i < 5; i++) noise(i * 0.08, 0.07, 0.1, 1800, 1.4); }, air() { noise(0, 0.6, 0.1, 5000, 0.7); },
     rustle() { noise(0, 0.3, 0.06, 3000, 0.8); }, honk() { SFX.honk(); }, bark() { SFX.woof(); }, bark2() { SFX.woof(); },
     squeak() { tone('sine', 1400, 0, 0.15, 0.08, 1900); }, boing() { tone('sine', 300, 0, 0.3, 0.12, 700); },
-  }, 'trash-music', 0.18);
+  }, 'trash-music', 0.21);
   const engine = SND.loop('engine');
   function whine(up) { tone('sawtooth', up ? 150 : 230, 0, 0.55, 0.02, up ? 260 : 140); }
 

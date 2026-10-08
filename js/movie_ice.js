@@ -223,7 +223,7 @@
       src.connect(gn); gn.connect(master); src.start(0, (st.t - from) % music.buf.duration);
       music.src = src; music.gain = gn;
     }
-    if (music.gain) music.gain.gain.value = 0.3 * clamp01((st.t - from) / 1.5) * clamp01((END - 0.4 - st.t) / 2.5) * (st.t > 29 && st.t < 32.5 ? 0.35 : 1);
+    if (music.gain) music.gain.gain.value = 0.26 * clamp01((st.t - from) / 1.5) * clamp01((END - 0.4 - st.t) / 2.5) * (st.t > 29 && st.t < 32.5 ? 0.35 : 1);
   }
 
   /* ---------- the shots ---------- */

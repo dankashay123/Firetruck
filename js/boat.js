@@ -25,7 +25,7 @@
     steam() { noise(0, 0.5, 0.2, 4000, 0.6); },
     splash() { noise(0, 0.5, 0.15, 1400, 0.7); }, splash2() { noise(0, 0.7, 0.15, 1100, 0.7); }, plop() { noise(0, 0.4, 0.2, 900, 0.8); },
     pop() { tone('sine', 900, 0, 0.06, 0.08, 300); }, chime() { SFX.chime(); }, squeak() { tone('sine', 1400, 0, 0.15, 0.08, 1900); },
-  }, 'boat-music', 0.2);
+  }, 'boat-music', 0.16);
   const motor = SND.loop('motor'), waves = SND.loop('waves'), hose = SND.loop('water');
   const toot = long => SND.play(long ? 'horn' : 'toot', long ? 1 : 1 + Math.random() * 0.12);
 
